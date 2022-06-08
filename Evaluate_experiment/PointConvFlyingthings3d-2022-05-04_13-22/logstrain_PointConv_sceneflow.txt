@@ -1,0 +1,19 @@
+2022-05-04 13:22:52,510 - PointConv - INFO - ----------------------------------------TRAINING----------------------------------
+2022-05-04 13:22:52,510 - PointConv - INFO - PARAMETER ...
+2022-05-04 13:22:52,510 - PointConv - INFO - {'gpu': '0', 'multi_gpu': None, 'model_name': 'PointConv', 'full': False, 'evaluate': True, 'resume': True, 'ckpt_dir': './pretrain_weights/PointConv/', 'arch': 'Separable', 'last_relu': False, 'allow_less_points': False, 'batch_size': 1, 'pretrain': 'S_1176_0.0582.pth', 'dim': 3, 'num_points': 8192, 'DEVICE': 'cuda', 'dataset': 'KITTI', 'data_root': 'datasets', 'data_process': {'DEPTH_THRESHOLD': 35.0, 'NO_CORR': True}, 'workers': 0}
+2022-05-04 13:22:52,577 - PointConv - INFO - val_dataset: Dataset KITTI
+    Number of datapoints: 142
+    Number of points per point cloud: 8192
+    is removing ground: True
+    Root Location: datasets\kitti_processed
+    Transforms (if any): ProcessData
+                         (data_process_args: 
+                         	DEPTH_THRESHOLD: 35.0
+                         	NO_CORR: True
+                         	allow_less_points: False
+                         	num_points: 8192
+                         )
+
+2022-05-04 13:22:54,085 - PointConv - INFO - load model ./pretrain_weights/PointConv/S_1176_0.0582.pth
+2022-05-04 13:23:24,504 - PointConv - INFO - [94mEvaluate[0m mean loss: 28.455128 mean epe: 0.060267
+2022-05-04 13:23:24,506 - PointConv - INFO -  * EPE3D 0.0603	ACC3DS 0.7104	ACC3DR 0.9006	Outliers3D 0.2754	EPE2D 2.8872	ACC2D 0.7687

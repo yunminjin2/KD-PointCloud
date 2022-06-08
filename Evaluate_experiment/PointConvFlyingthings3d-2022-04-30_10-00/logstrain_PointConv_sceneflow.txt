@@ -1,0 +1,16 @@
+2022-04-30 10:00:42,250 - PointConv - INFO - ----------------------------------------TRAINING----------------------------------
+2022-04-30 10:00:42,250 - PointConv - INFO - PARAMETER ...
+2022-04-30 10:00:42,251 - PointConv - INFO - {'gpu': '0', 'multi_gpu': None, 'model_name': 'PointConv', 'full': False, 'evaluate': True, 'resume': True, 'ckpt_dir': './pretrain_weights/PointConv/', 'arch': 'Separable', 'last_relu': False, 'allow_less_points': False, 'batch_size': 1, 'pretrain': 'S_1188_0.1018.pth', 'dim': 3, 'num_points': 8192, 'DEVICE': 'cuda', 'dataset': 'KITTI', 'data_root': 'datasets', 'data_process': {'DEPTH_THRESHOLD': 35.0, 'NO_CORR': True}, 'workers': 0}
+2022-04-30 10:00:42,346 - PointConv - INFO - val_dataset: Dataset KITTI
+    Number of datapoints: 142
+    Number of points per point cloud: 8192
+    is removing ground: True
+    Root Location: datasets\kitti_processed
+    Transforms (if any): ProcessData
+                         (data_process_args: 
+                         	DEPTH_THRESHOLD: 35.0
+                         	NO_CORR: True
+                         	allow_less_points: False
+                         	num_points: 8192
+                         )
+

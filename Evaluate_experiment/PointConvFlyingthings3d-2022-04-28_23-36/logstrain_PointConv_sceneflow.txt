@@ -1,0 +1,3 @@
+2022-04-28 23:36:50,567 - PointConv - INFO - ----------------------------------------TRAINING----------------------------------
+2022-04-28 23:36:50,567 - PointConv - INFO - PARAMETER ...
+2022-04-28 23:36:50,567 - PointConv - INFO - {'gpu': '0', 'multi_gpu': None, 'model_name': 'PointConv', 'full': False, 'evaluate': True, 'resume': True, 'ckpt_dir': './pretrain_weights/PointConv/', 'arch': 'Separable', 'last_relu': False, 'allow_less_points': False, 'batch_size': 1, 'pretrain': 'models_bid_lighttoken_res_369_0.0288.pth', 'dim': 3, 'num_points': 8192, 'DEVICE': 'cuda', 'dataset': 'KITTI', 'data_root': '/datasets', 'data_process': {'DEPTH_THRESHOLD': 35.0, 'NO_CORR': True}, 'workers': 0}
