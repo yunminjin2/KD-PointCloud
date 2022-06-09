@@ -608,11 +608,20 @@ def attentiveImitatinoLoss(outputs, fps_idxs, gt_flow, teacher_outputs, teacher_
 
     return KD_loss
 
-def attentiveHintTraning(outputs, fps_idxs, gt_flow, teacher_outputs, teacher_fps_idxs, t_history, gamma, alpha=[0.02, 0.04, 0.08, 0.16]):
+def attentiveLossTraning(outputs, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, teacher_fps_idxs, gamma, alpha=[0.02, 0.04, 0.08, 0.16]):
     KD_loss = torch.zeros(1).cuda()
 
-    
+    teacher_outputs_0 = teacher_outputs[0].permute(0, 2, 1)
 
+    g_loss1 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+    g_loss2 = multiScaleLoss(outputs, gt_flow, fps_idxs2)
+
+    k_loss1 = multiScaleLoss(outputs, teacher_outputs_0, fps_idxs1)
+    k_loss2 = multiScaleLoss(outputs, teacher_outputs_0, fps_idxs2)
+
+    print("g_loss1: {}, g_loss2: {}, k_loss1: {}, k_loss2:{}".format(g_loss1, g_loss2, k_loss1, k_loss2))
+    KD_loss += gamma*k_loss1 + (1-gamma)*g_loss1
+    return KD_loss
 
 
 

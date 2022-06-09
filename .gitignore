@@ -4115,3 +4115,17 @@ experiment/0.1_FT/checkpoints/PointConv_006_0.3700.pth
 experiment/0.1_FT/checkpoints/PointConv_002_0.4186.pth
 experiment/0.1_FT/checkpoints/PointConv_001_0.5326.pth
 experiment/0.1_FT/checkpoints/PointConv_000_0.6561.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_000_0.8287.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_001_0.7187.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_002_0.5535.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_004_0.4143.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_006_0.3999.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_007_0.3781.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_010_0.3748.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_012_0.3290.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_013_0.3276.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_017_0.3231.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_020_0.2941.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_022_0.2888.pth
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/logs/pointconv_util.py
+experiment/PointConvPointConvKITTI-2022-06-09_13-17/logs/train_PointConv_sceneflow.txt

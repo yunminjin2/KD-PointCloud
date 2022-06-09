@@ -11,7 +11,7 @@ import datetime
 import logging
 
 from tqdm import tqdm 
-from models_bid_pointconv import PointConvBidStudentModel,PointConvBidStudentModel2,  PointConvBidirection, attentiveImitatinoLoss, loss_fn_kd_2
+from models_bid_pointconv import PointConvBidStudentModel,PointConvBidStudentModel2,  PointConvBidirection, attentiveLossTraning, loss_fn_kd_2
 from models_bid_pointconv import multiScaleLoss
 from pathlib import Path
 from collections import defaultdict
@@ -100,7 +100,7 @@ def main():
     blue = lambda x: '\033[94m' + x + '\033[0m'
     t_model = PointConvBidirection()
     t_model.load_state_dict(torch.load(teacher_model_path))
-    st_model = PointConvBidStudentModel2()
+    st_model = PointConvBidStudentModel()
 
     '''GPU selection and multi-GPU'''
     if args.multi_gpu is not None:
@@ -170,8 +170,8 @@ def main():
             pred_flows, fps_pc1_idxs, fps_pc2_idxs, _, _ = st_model(pos1, pos2, norm1, norm2)
 
             # loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.9)
-            loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
-            # loss = attentiveImitatinoLoss(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, t_history, 0.5)
+            # loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
+            loss = attentiveLossTraning(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
             # loss, _, _, _ = 
             
             history['loss'].append(loss.cpu().data.numpy())
