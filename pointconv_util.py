@@ -809,7 +809,7 @@ class SceneFlowEstimatorResidual(nn.Module):
         flow: B 3 N
         '''
         new_points = torch.cat([feats, cost_volume], dim = 1)
-
+        
         for _, pointconv in enumerate(self.pointconv_list):
             new_points = pointconv(xyz, new_points)
 

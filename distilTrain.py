@@ -11,7 +11,7 @@ import datetime
 import logging
 
 from tqdm import tqdm 
-from models_bid_pointconv import PointConvBidStudentModel,PointConvBidStudentModel2,  PointConvBidirection, attentiveLossTraning, loss_fn_kd_2
+from models_bid_pointconv import PointConvBidStudentModel,PointConvBidStudentModel2,  PointConvBidirection, attentiveImitationLoss, attentiveLossTraning, loss_fn_kd_2
 from models_bid_pointconv import multiScaleLoss
 from pathlib import Path
 from collections import defaultdict
@@ -139,8 +139,7 @@ def main():
     # Get max, min teacher loss
     _, _, t_history = eval_sceneflow(t_model, train_loader)
 
-
-
+    print(t_history)
     history = defaultdict(lambda: list())
     best_epe = 1000.0
     for epoch in range(init_epoch, args.epochs):
@@ -171,8 +170,8 @@ def main():
 
             # loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.9)
             # loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
-            loss = attentiveLossTraning(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
-            # loss, _, _, _ = 
+            loss = attentiveLossTraning(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3, 1.0, 0.9)
+            # loss = attentiveImitationLoss(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, t_history, 0.3)
             
             history['loss'].append(loss.cpu().data.numpy())
             loss.backward()
@@ -281,7 +280,7 @@ def analyzing():
     
 
     teacher_model_path = args.ckpt_dir + args.teacher_model
-    t_model = PointConvBidStudentModel()
+    t_model = PointConvBidirection()
     t_model.load_state_dict(torch.load(teacher_model_path))
     t_model.cuda()
 

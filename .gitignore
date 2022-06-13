@@ -4129,3 +4129,12 @@ experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_020_0.
 experiment/PointConvPointConvKITTI-2022-06-09_13-17/checkpoints/PointConv_022_0.2888.pth
 experiment/PointConvPointConvKITTI-2022-06-09_13-17/logs/pointconv_util.py
 experiment/PointConvPointConvKITTI-2022-06-09_13-17/logs/train_PointConv_sceneflow.txt
+*.pth
+experiment/PointConvPointConvKITTI-2022-06-09_20-12/logs/pointconv_util.py
+experiment/PointConvPointConvKITTI-2022-06-09_20-12/logs/train_PointConv_sceneflow.txt
+experiment/PointConvPointConvKITTI-2022-06-10_14-04/logs/pointconv_util.py
+experiment/PointConvPointConvKITTI-2022-06-10_14-04/logs/train_PointConv_sceneflow.txt
+experiment/PointConvPointConvKITTI-2022-06-12_19-50/logs/pointconv_util.py
+experiment/PointConvPointConvKITTI-2022-06-12_19-50/logs/train_PointConv_sceneflow.txt
+experiment/PointConvPointConvKITTI-2022-06-12_20-05/logs/pointconv_util.py
+experiment/PointConvPointConvKITTI-2022-06-12_20-05/logs/train_PointConv_sceneflow.txt

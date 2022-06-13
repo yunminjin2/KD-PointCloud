@@ -15,8 +15,7 @@ epochs: 1200
 learning_rate: 0.001
 
 ckpt_dir: ./pretrain_weights/PointConv/
-teacher_model: T_1187_0.0738.pth
-
+teacher_model: models_bid_lighttoken_res_369_0.0288.pth
 optimizer: Adam
 pretrain: null
 # pretrain: ./experiment/PointConvPointConvKITTI-2022-04-28_15-09/checkpoints/PointConv_270_0.0962.pth
