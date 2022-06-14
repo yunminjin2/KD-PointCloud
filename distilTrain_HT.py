@@ -11,7 +11,7 @@ import datetime
 import logging
 
 from tqdm import tqdm 
-from models_bid_pointconv import PointConvBidStudentModel,PointConvBidStudentModel2,  PointConvBidirection, attentiveImitationLoss, biDirectionLoss, hintLoss, loss_fn_kd_2
+from models_bid_pointconv import PointConvBidStudentModel,PointConvBidStudentModel2,  PointConvBidirection, PointConvBidirection2, attentiveImitationLoss, biDirectionLoss, loss_fn_ht, loss_fn_kd_2
 from models_bid_pointconv import multiScaleLoss
 from pathlib import Path
 from collections import defaultdict
@@ -98,9 +98,9 @@ def main():
     )
 
     blue = lambda x: '\033[94m' + x + '\033[0m'
-    t_model = PointConvBidirection()
+    t_model = PointConvBidirection2()
     t_model.load_state_dict(torch.load(teacher_model_path))
-    st_model = PointConvBidStudentModel()
+    st_model = PointConvBidStudentModel2()
 
     '''GPU selection and multi-GPU'''
     if args.multi_gpu is not None:
@@ -137,7 +137,7 @@ def main():
     LEARNING_RATE_CLIP = 1e-5 
 
     # Get max, min teacher loss
-    _, _, t_history = eval_sceneflow(t_model, train_loader)
+
     history = defaultdict(lambda: list())
     best_epe = 1000.0
     for epoch in range(init_epoch, args.epochs):
@@ -162,15 +162,14 @@ def main():
             
             t_model.eval()
             with torch.no_grad():
-                t_pred_flows, t_fps_pc1_idxs, t_pc1, _, _ = t_model(pos1, pos2, norm1, norm2)
+                t_pred_flows, t_fps_pc1_idxs, _, _, _, t_feat1s, _ = t_model(pos1, pos2, norm1, norm2)
             st_model.train()         
-            pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, _ = st_model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, fps_pc2_idxs, _, _, feat1s, _ = st_model(pos1, pos2, norm1, norm2)
 
-            
             # loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
             # loss = attentiveImitationLoss(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, t_history, 0.3)
-            loss = biDirectionLoss(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows,  t_fps_pc1_idxs, 0.3, 1.0, 0.9)
-            # loss = hintLoss(pred_flows, pc1, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_pc1, t_fps_pc1_idxs, 0.3)
+            # loss = biDirectionLoss(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows,  t_fps_pc1_idxs, 0.3, 1.0, 0.9)
+            loss = loss_fn_ht(pred_flows, feat1s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_fps_pc1_idxs, 0.3)
             
             history['loss'].append(loss.cpu().data.numpy())
             loss.backward()
@@ -218,7 +217,7 @@ def eval_sceneflow(model, loader):
         flow = flow.cuda() 
 
         with torch.no_grad():
-            pred_flows, fps_pc1_idxs, _, _, _ = model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, _, _, _, _, _ = model(pos1, pos2, norm1, norm2)
 
             eval_loss = multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
             history.append(eval_loss)
@@ -279,11 +278,11 @@ def analyzing():
     
 
     teacher_model_path = args.ckpt_dir + args.teacher_model
-    t_model = PointConvBidirection()
+    t_model = PointConvBidirection2()
     t_model.load_state_dict(torch.load(teacher_model_path))
     t_model.cuda()
 
-    st_model = PointConvBidStudentModel()
+    st_model = PointConvBidStudentModel2()
     st_model.cuda()
 
 
@@ -299,25 +298,14 @@ def analyzing():
 
         t_model.eval()
         with torch.no_grad():
-            t_pred_flows, t_fps_pc1_idxs, t_fps_pc2_idxs, t_pc1, t_pc2 = t_model(pos1, pos2, norm1, norm2)
+            t_pred_flows, t_fps_pc1_idxs, t_fps_pc2_idxs, t_pc1, t_pc2, t_feat1s, t_feat2s = t_model(pos1, pos2, norm1, norm2)
         st_model.train()
-        pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2 = st_model(pos1, pos2, norm1, norm2)
-        gt_flows = [flow]
-        for i in range(1, len(t_fps_pc1_idxs) + 1):
-            fps_idx = t_fps_pc1_idxs[i - 1]
-            sub_gt_flow = index_points(gt_flows[-1], fps_idx)
-            gt_flows.append(sub_gt_flow)
+        pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s = st_model(pos1, pos2, norm1, norm2)
 
-        pos1 = pos1.permute(0, 2, 1)
-        pos2 = pos2.permute(0, 2, 1)
-        flow = flow.permute(0, 2, 1)
- 
-        for i in range(0, 50):
-                
-            print(pos1[0][0][i], pos1[0][1][i], pos1[0][2][i], " -- ", t_pc1[1][0][0][i], t_pc1[1][0][1][i], t_pc1[1][0][2][i], "[", t_fps_pc1_idxs[0][0][i], "]")
-            print(pos2[0][0][i], pos2[0][1][i], pos2[0][2][i], " -- ", t_pc2[1][0][0][i], t_pc2[1][0][1][i], t_pc2[1][0][2][i], "[", t_fps_pc2_idxs[0][0][i], "]")
+        loss = loss_fn_ht(pred_flows, feat1s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_fps_pc1_idxs, 0.3)
 
-            print(flow[0][0][i], flow[0][1][i], flow[0][2][i], " -- ", t_pred_flows[0][0][0][i], t_pred_flows[0][0][1][i], t_pred_flows[0][0][2][i])
+
+
 
         break
 # ______________________    ____
