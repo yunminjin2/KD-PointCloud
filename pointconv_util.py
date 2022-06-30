@@ -1,7 +1,7 @@
 
 import torch 
 import torch.nn as nn 
-
+import torchvision
 import torch.nn.functional as F
 from time import time
 import numpy as np
@@ -65,6 +65,18 @@ class BottleNeck(nn.Module):
         out = fx + x  # F(x) + x
         out = self.relu(out)
         return out
+
+class ConvBNReLU(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, affine=True):
+        super(ConvBNReLU, self).__init__()
+
+        self.op = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding, groups=in_channels,bias=False),
+            nn.ReLU(inplace=False)   
+        )
+
+    def forward(self, x):
+        return self.op(x)
 
 def square_distance(src, dst):
     """
@@ -291,6 +303,7 @@ class PointConvD(nn.Module):
         # B, N, S, C
         new_points = torch.matmul(input=new_points.permute(0, 1, 3, 2), other = weights.permute(0, 3, 2, 1)).view(B, self.npoint, -1)
         new_points = self.linear(new_points)
+
         if self.bn:
             new_points = self.bn_linear(new_points.permute(0, 2, 1))
         else:
@@ -413,55 +426,6 @@ class SetAbstract(nn.Module):
 
         for i, conv in enumerate(self.mlp2_convs):
             new_points = self.relu(conv(new_points))
-
-        return new_xyz.permute(0, 2, 1), new_points, fps_idx
-
-class PointAtten(nn.Module):
-    def __init__(self, npoint, nsample, in_channel, out_channel, weightnet = 16, bn = use_bn, use_leaky = True):
-        super(PointConvD, self).__init__()
-        self.npoint = npoint
-        self.bn = bn
-        self.nsample = nsample
-        self.weightnet = WeightNet(3, weightnet)
-        self.linear = nn.Linear(weightnet * in_channel, out_channel)
-        if bn:
-            self.bn_linear = nn.BatchNorm1d(out_channel)
-
-        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
-
-    def forward(self, xyz, points):
-        """
-        PointConv with downsampling.
-        Input:
-            xyz: input points position data, [B, C, N]
-            points: input points data, [B, D, N]
-        Return:
-            new_xyz: sampled points position data, [B, C, S]
-            new_points_concat: sample points feature data, [B, D', S]
-        """
-        #import ipdb; ipdb.set_trace()
-        B = xyz.shape[0]
-        N = xyz.shape[2]
-        xyz = xyz.permute(0, 2, 1)
-        points = points.permute(0, 2, 1)
-
-        fps_idx = pointnet2_utils.furthest_point_sample(xyz, self.npoint)
-        new_xyz = index_points_gather(xyz, fps_idx)
-
-        new_points, grouped_xyz_norm = group_query(self.nsample, xyz, new_xyz, points) # B, N, S, C
-
-        grouped_xyz = grouped_xyz_norm.permute(0, 3, 2, 1)
-        weights = self.weightnet(grouped_xyz) # B, 16, S, N
-
-        new_points = torch.matmul(input=new_points.permute(0, 1, 3, 2), other = weights.permute(0, 3, 2, 1)).view(B, self.npoint, -1) # B, N, C, S x B, N, S, 16
-
-        new_points = self.linear(new_points)
-        if self.bn:
-            new_points = self.bn_linear(new_points.permute(0, 2, 1))
-        else:
-            new_points = new_points.permute(0, 2, 1)
-
-        new_points = self.relu(new_points)
 
         return new_xyz.permute(0, 2, 1), new_points, fps_idx
 

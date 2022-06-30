@@ -20,8 +20,11 @@ num_points: 8192
 
 DEVICE: cuda
 
-dataset: KITTI # FlyingThings3DSubset KITTI
-data_root: datasets
+# dataset: KITTI
+# data_root: datasets
+
+dataset: FlyingThings3DSubsetMin
+data_root: D:/AI_Pracrice/data
 
 data_process:
   DEPTH_THRESHOLD: 35.

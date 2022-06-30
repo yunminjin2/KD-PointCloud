@@ -10,8 +10,7 @@ import datetime
 import logging
 
 from tqdm import tqdm 
-from models_bid_pointconv import PointConvBidStudentModel, PointConvBidirection
-from models_bid_pointconv import multiScaleLoss, multiScaleChamferSmoothCurvature
+from models_bid_pointconv import PointConvBidirection, multiScaleLoss
 from pathlib import Path
 from collections import defaultdict
 
@@ -33,7 +32,7 @@ def main():
     '''CREATE DIR'''
     experiment_dir = Path('./experiment/')
     experiment_dir.mkdir(exist_ok=True)
-    file_dir = Path(str(experiment_dir) + '/PointConv%sKITTI-'%args.model_name + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')))
+    file_dir = Path(str(experiment_dir) + '/PointConv%sFlyingthings3d-'%args.model_name + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')))
     file_dir.mkdir(exist_ok=True)
     checkpoints_dir = file_dir.joinpath('checkpoints/')
     checkpoints_dir.mkdir(exist_ok=True)
@@ -57,7 +56,7 @@ def main():
     logger.info(args)
 
     blue = lambda x: '\033[94m' + x + '\033[0m'
-    model = PointConvBidStudentModel()
+    model = PointConvBidirection()
 
     train_dataset = datasets.__dict__[args.dataset](
         train=True,
@@ -67,7 +66,7 @@ def main():
                                             args.num_points),
         num_points=args.num_points,
         data_root = args.data_root,
-        # full=args.full
+        full=args.full
     )
     logger.info('train_dataset: ' + str(train_dataset))
     train_loader = torch.utils.data.DataLoader(
@@ -148,7 +147,7 @@ def main():
             flow = flow.cuda() 
 
             model = model.train() 
-            pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2 = model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, _, _ = model(pos1, pos2, norm1, norm2)
 
             loss = multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
             # loss, _, _, _ = multiScaleChamferSmoothCurvature(pc1, pc2, pred_flows)
@@ -198,7 +197,7 @@ def eval_sceneflow(model, loader):
         flow = flow.cuda() 
 
         with torch.no_grad():
-            pred_flows, fps_pc1_idxs, _, _, _ = model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, _, _, _, _, _ = model(pos1, pos2, norm1, norm2)
 
             eval_loss = multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
 

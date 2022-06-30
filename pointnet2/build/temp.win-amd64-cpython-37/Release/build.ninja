@@ -19,15 +19,15 @@ rule cuda_compile
 
 
 
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/ball_query.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\ball_query.cpp
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/ball_query_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\ball_query_gpu.cu
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/group_points.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\group_points.cpp
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/group_points_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\group_points_gpu.cu
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/interpolate.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\interpolate.cpp
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/interpolate_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\interpolate_gpu.cu
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/pointnet2_api.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\pointnet2_api.cpp
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/sampling.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\sampling.cpp
-build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\build\temp.win-amd64-cpython-37\Release\src/sampling_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud2\pointnet2\src\sampling_gpu.cu
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/ball_query.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\ball_query.cpp
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/ball_query_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\ball_query_gpu.cu
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/group_points.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\group_points.cpp
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/group_points_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\group_points_gpu.cu
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/interpolate.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\interpolate.cpp
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/interpolate_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\interpolate_gpu.cu
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/pointnet2_api.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\pointnet2_api.cpp
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/sampling.obj: compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\sampling.cpp
+build C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\build\temp.win-amd64-cpython-37\Release\src/sampling_gpu.obj: cuda_compile C$:\Users\yunmi\OneDrive\성균관대학$ 자료\졸업\졸업논문$ 연구\KD-PointCloud\pointnet2\src\sampling_gpu.cu
 
 
 

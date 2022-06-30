@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch
 import numpy as np
 import torch.nn.functional as F
-from pointconv_util import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLight as CrossLayer
-from pointconv_util import SceneFlowEstimatorResidual
-from pointconv_util import index_points_gather as index_points, index_points_group, Conv1d, square_distance
+from pointconv_util2 import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLight as CrossLayer
+from pointconv_util2 import SceneFlowEstimatorResidual
+from pointconv_util2 import index_points_gather as index_points, index_points_group, Conv1d, square_distance
 import time
 
 scale = 1.0
@@ -25,13 +25,13 @@ class PointConvBidirection(nn.Module):
         # self.level0_1_t1 = Conv1d(32, 32)
         # self.level0_1_t2 = Conv1d(32, 32)
         self.cross0 = CrossLayer(flow_nei, 32 + 32 , [32, 32], [32, 32])
-        self.flow0 = SceneFlowEstimatorResidual(32 + 64, 32)
+        self.flow0 = SceneFlowEstimatorResidual(32 + 64, 32, weightnet = weightnet)
         self.level0_2 = Conv1d(32, 64)
 
         #l1: 2048
         self.level1 = PointConvD(2048, feat_nei, 64 + 3, 64, weightnet = weightnet)
         self.cross1 = CrossLayer(flow_nei, 64 + 32, [64, 64], [64, 64])
-        self.flow1 = SceneFlowEstimatorResidual(64 + 64, 64)
+        self.flow1 = SceneFlowEstimatorResidual(64 + 64, 64, weightnet = weightnet)
         self.level1_0 = Conv1d(64, 64)
         # self.level1_0_t1 = Conv1d(64, 64)
         # self.level1_0_t2 = Conv1d(64, 64)
@@ -40,7 +40,7 @@ class PointConvBidirection(nn.Module):
         #l2: 512
         self.level2 = PointConvD(512, feat_nei, 128 + 3, 128, weightnet = weightnet)
         self.cross2 = CrossLayer(flow_nei, 128 + 64, [128, 128], [128, 128])
-        self.flow2 = SceneFlowEstimatorResidual(128 + 64, 128)
+        self.flow2 = SceneFlowEstimatorResidual(128 + 64, 128, weightnet = weightnet)
         self.level2_0 = Conv1d(128, 128)
         # self.level2_0_t1 = Conv1d(128, 128)
         # self.level2_0_t2 = Conv1d(128, 128)
@@ -49,7 +49,7 @@ class PointConvBidirection(nn.Module):
         #l3: 256
         self.level3 = PointConvD(256, feat_nei, 256 + 3, 256, weightnet = weightnet)
         self.cross3 = CrossLayer(flow_nei, 256 + 64, [256, 256], [256, 256])
-        self.flow3 = SceneFlowEstimatorResidual(256, 256)
+        self.flow3 = SceneFlowEstimatorResidual(256, 256, weightnet = weightnet)
         self.level3_0 = Conv1d(256, 256)
         # self.level3_0_t1 = Conv1d(256, 256)
         # self.level3_0_t2 = Conv1d(256, 256)
