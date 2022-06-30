@@ -1,4 +1,5 @@
 datasets/KITTI/*
+datasets/FlyingThings3D_subset_processed_35m
 experiment/*
 Evaluate_experiment/*
 *.npy
