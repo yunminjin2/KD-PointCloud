@@ -25,7 +25,7 @@ DEVICE: cuda
 
 evaluate: False
 
-# dataset: KITTI
+ dataset: KITTI
 # data_root: datasets
 
 dataset: FlyingThings3DSubsetMin

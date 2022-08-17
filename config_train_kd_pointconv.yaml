@@ -10,7 +10,7 @@ last_relu: False
 allow_less_points: False
 
 # general args
-batch_size: 4
+batch_size: 2
 epochs: 560
 learning_rate: 0.001
 
@@ -18,7 +18,7 @@ ckpt_dir: ./pretrain_weights/PointConv/
 teacher_model: models_bid_lighttoken_res_369_0.0288.pth
 optimizer: Adam
 pretrain: null
-# pretrain: ./experiment/PointConvPointConvKITTI-2022-04-28_15-09/checkpoints/PointConv_270_0.0962.pth
+# pretrain: ./experiment/PointConvPointConvFlyingthings3d-2022-07-10_13-22/checkpoints/PointConv_337_0.0692.pth
 weight_decay: 0.0001
 
 dim: 3

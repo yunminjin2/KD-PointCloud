@@ -12,7 +12,7 @@ import datetime
 import logging
 
 from tqdm import tqdm 
-from models_bid_pointconv import PointConvBidStudentModel, PointConvBidirection
+from models_bid_lighttoken_res import PointConvBidirection
 from models_bid_pointconv import multiScaleLoss
 from pathlib import Path
 from collections import defaultdict
@@ -62,7 +62,7 @@ def main():
     logger.info(args)
 
     blue = lambda x: '\033[94m' + x + '\033[0m'
-    model = PointConvBidStudentModel()
+    model = PointConvBidirection()
 
     val_dataset = datasets.__dict__[args.dataset](
         train=False,
@@ -114,7 +114,7 @@ def main():
 
         model = model.eval()
         with torch.no_grad(): 
-            pred_flows, fps_pc1_idxs, _, _, _ = model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, _, _, _, _, _ = model(pos1, pos2, norm1, norm2)
 
             loss = multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
 

@@ -64,6 +64,21 @@ def biDirectionLoss(outputs, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, tea
     KD_loss += beta*(gamma1*k_loss1 + (1-gamma1)*g_loss1) + (1-beta)*(gamma2*k_loss2 + (1-gamma2)*g_loss2)
     return KD_loss
 
+def biDirection_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, t_feat1s, t_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, beta, layer=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
+    KD_loss = torch.zeros(1).cuda()
+
+    teacher_outputs_0 = teacher_outputs[0].permute(0, 2, 1)
+    loss1 = multiScaleLoss(outputs, teacher_outputs_0, fps_idxs1)
+    loss2 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+    
+    src_hint_loss = ((feat1s[layer]-t_feat1s[layer])**2)/2
+    target_hint_loss = ((feat2s[layer]-t_feat2s[layer])**2)/2
+
+
+    KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(0.5*src_hint_loss.sum() + 0.5*target_hint_loss.sum())
+
+    return KD_loss
+
 
 def loss_fn_ht(outputs, feat1s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, t_feat1s, teacher_fps_idxs, gamma, layer=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
     KD_loss = torch.zeros(1).cuda()
@@ -72,9 +87,54 @@ def loss_fn_ht(outputs, feat1s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, 
     loss1 = multiScaleLoss(outputs, teacher_outputs_0, fps_idxs1)
     loss2 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
 
-    Hint_loss = ((feat1s[3]-t_feat1s[3])**2)/2
+    Hint_loss = ((feat1s[layer]-t_feat1s[layer])**2)/2
 
 
     KD_loss += gamma*loss1 + (1-gamma)*loss2  + Hint_loss.sum()/(feat1s[0].nelement())
+
+    return KD_loss
+
+def cross_biDirection_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, t_feat1s, t_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, beta, layer=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
+    KD_loss = torch.zeros(1).cuda()
+
+    teacher_outputs_0 = teacher_outputs[0].permute(0, 2, 1)
+    loss1 = multiScaleLoss(outputs, teacher_outputs_0, fps_idxs1)
+    loss2 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+    
+    src_hint_loss = ((feat1s[layer]-t_feat2s[layer])**2)/2
+    target_hint_loss = ((feat2s[layer]-t_feat1s[layer])**2)/2
+
+
+    KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(0.5*src_hint_loss.sum() + 0.5*target_hint_loss.sum())
+
+    return KD_loss
+
+def cross_loss(outputs, crosses, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, t_crosses, t_fps_idxs1, t_fps_idxs2, gamma, beta, alpha=[0.02, 0.04, 0.08, 0.16]):
+    KD_loss = torch.zeros(1).cuda()
+
+    teacher_outputs_0 = teacher_outputs[0].permute(0, 2, 1)
+    loss1 = multiScaleLoss(outputs, teacher_outputs_0, fps_idxs1)
+    loss2 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+
+    cross_loss = 0
+    for layer in range(len(crosses)):
+        cross_loss += ((((crosses[layer]-t_crosses[layer])**2)/2).sum())/crosses[layer].nelement()
+
+    KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(cross_loss)
+
+    return KD_loss
+
+
+def bridge_ht_loss(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, b_feat1s, b_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, beta, layer=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
+    KD_loss = torch.zeros(1).cuda()
+
+    teacher_outputs_0 = teacher_outputs[0].permute(0, 2, 1)
+    loss1 = multiScaleLoss(outputs, teacher_outputs_0, fps_idxs1)
+    loss2 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+    
+    src_hint_loss = ((feat1s[layer]-b_feat1s)**2)/2
+    target_hint_loss = ((feat2s[layer]-b_feat2s)**2)/2
+
+    KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(0.5*src_hint_loss.sum() + 0.5*target_hint_loss.sum())
 
     return KD_loss

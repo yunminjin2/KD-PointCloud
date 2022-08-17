@@ -183,8 +183,9 @@ class PointConvBidirection(nn.Module):
         fps_pc2_idxs = [fps_pc2_l1, fps_pc2_l2, fps_pc2_l3]
         feat1s = [feat1_l0_1, feat1_l1_2, feat1_l2_3, feat1_l3_4, feat1_l3_2, feat1_l2_1, feat1_l1_0]
         feat2s = [feat2_l0_1, feat2_l1_2, feat2_l2_3, feat2_l3_4, feat2_l3_2, feat2_l2_1, feat2_l1_0]
-        
-        return flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s
+        crosses = [cross0, cross1, cross2, cross3]
+
+        return flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s, crosses
 
 
 def multiScaleLoss(pred_flows, gt_flow, fps_idxs, alpha = [0.02, 0.04, 0.08, 0.16]):

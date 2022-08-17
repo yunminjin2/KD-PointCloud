@@ -4,13 +4,11 @@ import os
 
 import torch, numpy as np, glob, math, torch.utils.data, scipy.ndimage, multiprocessing as mp
 import torch.nn.functional as F
-import time
-import pickle 
 import datetime
 import logging
 
 from tqdm import tqdm 
-from models_bid_pointconv import PointConvBidirection, multiScaleLoss
+from models_bid_lighttoken_res import PointConvBidirection, multiScaleLoss
 from pathlib import Path
 from collections import defaultdict
 
@@ -123,7 +121,7 @@ def main():
                                      eps=1e-08, weight_decay=args.weight_decay)
                 
     optimizer.param_groups[0]['initial_lr'] = args.learning_rate 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=80, gamma=0.5, last_epoch = init_epoch - 1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5, last_epoch = init_epoch - 1)
     LEARNING_RATE_CLIP = 1e-5 
     
     history = defaultdict(lambda: list())

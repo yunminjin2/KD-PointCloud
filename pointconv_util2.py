@@ -1930,6 +1930,61 @@ class CrossLayerLightUp(nn.Module):
 
         return feat1_new, feat2_new, feat1_final
 
+class NoCrossLayerLight(nn.Module):
+    def __init__(self, nsample, in_channel, mlp1, bn = use_bn, use_leaky = True, output_clue=False):
+        super(NoCrossLayerLight,self).__init__()
+
+        self.nsample = nsample
+        self.bn = bn
+        self.output_clue = output_clue
+        self.mlp1_convs = nn.ModuleList()
+        if bn:
+            self.mlp1_bns = nn.ModuleList()
+
+        self.cross_t1 = nn.Conv1d(in_channel, mlp1[0], 1)
+        self.cross_t2 = nn.Conv1d(in_channel, mlp1[0], 1)
+
+        self.pos = nn.Conv2d(3, mlp1[0], 1)
+        self.bias = nn.Parameter(torch.randn((1, mlp1[0], 1, 1)),requires_grad=True)
+        self.bn = nn.BatchNorm2d(mlp1[0]) if bn else nn.Identity()
+
+        self.mlp = nn.ModuleList()
+        for i in range(1, len(mlp1)):
+            self.mlp.append(Conv2d(mlp1[i-1], mlp1[i], bn=bn, use_leaky=use_leaky))
+        
+        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
+
+    def cross(self, xyz1, xyz2, points1, points2, pos, mlp, bn):
+        B, C, N1 = xyz1.shape
+        _, _, N2 = xyz2.shape
+        _, D1, _ = points1.shape
+        _, D2, _ = points2.shape
+        xyz1 = xyz1.permute(0, 2, 1)
+        xyz2 = xyz2.permute(0, 2, 1)
+        points1 = points1.permute(0, 2, 1)
+        points2 = points2.permute(0, 2, 1)
+
+        knn_idx = knn_point(self.nsample, xyz2, xyz1) # B, N1, nsample
+        neighbor_xyz = index_points_group(xyz2, knn_idx)
+        direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
+        grouped_points2 = index_points_group(points2, knn_idx).permute(0, 3, 2, 1) # B, N1, nsample, D2
+        grouped_points1 = points1.view(B, N1, 1, D1).repeat(1, 1, self.nsample, 1).permute(0, 3, 2, 1)
+
+        direction_xyz = pos(direction_xyz.permute(0, 3, 2, 1))
+        new_points = self.relu(bn(grouped_points2 + grouped_points1 + direction_xyz))# B, N1, nsample, D1+D2+3
+
+        for i, conv in enumerate(mlp):
+            new_points = conv(new_points)
+        
+        new_points = F.max_pool2d(new_points, (new_points.size(2), 1)).squeeze(2)
+
+        return new_points
+
+    def forward(self, pc1, pc2, feat1, feat2):
+
+        feat1_new = self.cross(pc1, pc2, self.cross_t1(feat1),  self.cross_t2(feat2), self.pos, self.mlp, self.bn)
+
+        return feat1_new
 
 class PointConvFlow(nn.Module):
     def __init__(self, nsample, in_channel, mlp, bn = use_bn, use_leaky = True):

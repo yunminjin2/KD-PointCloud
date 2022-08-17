@@ -5,7 +5,7 @@ import numpy as np
 import torch.nn.functional as F
 from pointconv_util2 import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLight as CrossLayer
 from pointconv_util2 import SceneFlowEstimatorResidual
-from pointconv_util2 import index_points_gather as index_points, index_points_group, Conv1d, square_distance
+from pointconv_util import index_points_gather as index_points, index_points_group, Conv1d, square_distance
 import time
 
 scale = 1.0
@@ -16,14 +16,13 @@ class PointConvBidirection(nn.Module):
         super(PointConvBidirection, self).__init__()
 
         flow_nei = 32
-        feat_nei = 16
+        feat_nei = 32
         weightnet = 8
         self.scale = scale
         #l0: 8192
         self.level0 = Conv1d(3, 32)
         self.level0_1 = Conv1d(32, 32)
-        # self.level0_1_t1 = Conv1d(32, 32)
-        # self.level0_1_t2 = Conv1d(32, 32)
+
         self.cross0 = CrossLayer(flow_nei, 32 + 32 , [32, 32], [32, 32])
         self.flow0 = SceneFlowEstimatorResidual(32 + 64, 32, weightnet = weightnet)
         self.level0_2 = Conv1d(32, 64)
@@ -33,8 +32,6 @@ class PointConvBidirection(nn.Module):
         self.cross1 = CrossLayer(flow_nei, 64 + 32, [64, 64], [64, 64])
         self.flow1 = SceneFlowEstimatorResidual(64 + 64, 64, weightnet = weightnet)
         self.level1_0 = Conv1d(64, 64)
-        # self.level1_0_t1 = Conv1d(64, 64)
-        # self.level1_0_t2 = Conv1d(64, 64)
         self.level1_1 = Conv1d(64, 128)
 
         #l2: 512
@@ -42,8 +39,6 @@ class PointConvBidirection(nn.Module):
         self.cross2 = CrossLayer(flow_nei, 128 + 64, [128, 128], [128, 128])
         self.flow2 = SceneFlowEstimatorResidual(128 + 64, 128, weightnet = weightnet)
         self.level2_0 = Conv1d(128, 128)
-        # self.level2_0_t1 = Conv1d(128, 128)
-        # self.level2_0_t2 = Conv1d(128, 128)
         self.level2_1 = Conv1d(128, 256)
 
         #l3: 256
@@ -51,16 +46,12 @@ class PointConvBidirection(nn.Module):
         self.cross3 = CrossLayer(flow_nei, 256 + 64, [256, 256], [256, 256])
         self.flow3 = SceneFlowEstimatorResidual(256, 256, weightnet = weightnet)
         self.level3_0 = Conv1d(256, 256)
-        # self.level3_0_t1 = Conv1d(256, 256)
-        # self.level3_0_t2 = Conv1d(256, 256)
         self.level3_1 = Conv1d(256, 512)
 
         #l4: 64
         self.level4 = PointConvD(64, feat_nei, 512 + 3, 256, weightnet = weightnet)
 
         #deconv
-        # self.deconv4_3_t1 = Conv1d(256, 64)
-        # self.deconv4_3_t2 = Conv1d(256, 64)
         self.deconv4_3 = Conv1d(256, 64)
         self.deconv3_2 = Conv1d(256, 64)
         self.deconv2_1 = Conv1d(128, 32)
@@ -83,57 +74,47 @@ class PointConvBidirection(nn.Module):
         color1 = color1.permute(0, 2, 1) # B 3 N
         color2 = color2.permute(0, 2, 1) # B 3 N
         feat1_l0 = self.level0(color1)
-        # feat1_l0 = self.level0_1_t1(feat1_l0)
         feat1_l0 = self.level0_1(feat1_l0)
         feat1_l0_1 = self.level0_2(feat1_l0)
 
         feat2_l0 = self.level0(color2)
-        # feat2_l0 = self.level0_1_t2(feat2_l0)
         feat2_l0 = self.level0_1(feat2_l0)
         feat2_l0_1 = self.level0_2(feat2_l0)
 
         #l1
         pc1_l1, feat1_l1, fps_pc1_l1 = self.level1(pc1_l0, feat1_l0_1)
-        # feat1_l1 = self.level1_0_t1(feat1_l1)
         feat1_l1 = self.level1_0(feat1_l1)
         feat1_l1_2 = self.level1_1(feat1_l1)
 
         pc2_l1, feat2_l1, fps_pc2_l1 = self.level1(pc2_l0, feat2_l0_1)
-        # feat2_l1 = self.level1_0_t2(feat2_l1)
         feat2_l1 = self.level1_0(feat2_l1)
         feat2_l1_2 = self.level1_1(feat2_l1)
 
         #l2
         pc1_l2, feat1_l2, fps_pc1_l2 = self.level2(pc1_l1, feat1_l1_2)
-        # feat1_l2 = self.level2_0_t1(feat1_l2)
         feat1_l2 = self.level2_0(feat1_l2)
         feat1_l2_3 = self.level2_1(feat1_l2)
 
         pc2_l2, feat2_l2, fps_pc2_l2 = self.level2(pc2_l1, feat2_l1_2)
-        # feat2_l2 = self.level2_0_t2(feat2_l2)
         feat2_l2 = self.level2_0(feat2_l2)
         feat2_l2_3 = self.level2_1(feat2_l2)
 
         #l3
         pc1_l3, feat1_l3, fps_pc1_l3 = self.level3(pc1_l2, feat1_l2_3)
-        # feat1_l3 = self.level3_0_t1(feat1_l3)
         feat1_l3 = self.level3_0(feat1_l3)
         feat1_l3_4 = self.level3_1(feat1_l3)
 
         pc2_l3, feat2_l3, fps_pc2_l3 = self.level3(pc2_l2, feat2_l2_3)
-        # feat2_l3 = self.level3_0_t2(feat2_l3)
         feat2_l3 = self.level3_0(feat2_l3)
         feat2_l3_4 = self.level3_1(feat2_l3)
 
         #l4
         pc1_l4, feat1_l4, _ = self.level4(pc1_l3, feat1_l3_4)
         feat1_l4_3 = self.upsample(pc1_l3, pc1_l4, feat1_l4)
-        # feat1_l4_3 = self.deconv4_3_t1(feat1_l4_3)
         feat1_l4_3 = self.deconv4_3(feat1_l4_3)
 
         pc2_l4, feat2_l4, _ = self.level4(pc2_l3, feat2_l3_4)
         feat2_l4_3 = self.upsample(pc2_l3, pc2_l4, feat2_l4)
-        # feat2_l4_3 = self.deconv4_3_t2(feat2_l4_3)
         feat2_l4_3 = self.deconv4_3(feat2_l4_3)
 
         #l3
@@ -201,8 +182,11 @@ class PointConvBidirection(nn.Module):
         pc2 = [pc2_l0, pc2_l1, pc2_l2, pc2_l3]
         fps_pc1_idxs = [fps_pc1_l1, fps_pc1_l2, fps_pc1_l3]
         fps_pc2_idxs = [fps_pc2_l1, fps_pc2_l2, fps_pc2_l3]
+        feat1s = [feat1_l0_1, feat1_l1_2, feat1_l2_3, feat1_l3_4, feat1_l3_2, feat1_l2_1, feat1_l1_0]
+        feat2s = [feat2_l0_1, feat2_l1_2, feat2_l2_3, feat2_l3_4, feat2_l3_2, feat2_l2_1, feat2_l1_0]
+        crosses = [cross0, cross1, cross2, cross3]
 
-        return flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2
+        return flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s, crosses
 
 def multiScaleLoss(pred_flows, gt_flow, fps_idxs, alpha = [0.02, 0.04, 0.08, 0.16]):
 

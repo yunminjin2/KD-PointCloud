@@ -12,8 +12,8 @@ import logging
 
 from tqdm import tqdm 
 from models_bid_pointconv import PointConvBidirection
-from models_bid_non_linear import PointConvBidirection as PointConvStudentModel
-from loss_functions import  multiScaleLoss, attentiveImitationLoss, biDirectionLoss, loss_fn_kd_2, loss_fn_ht
+from models_bid_lighttoken_res import PointConvBidirection as PointConvStudentModel
+import loss_functions 
 from pathlib import Path
 from collections import defaultdict
 
@@ -135,11 +135,11 @@ def main():
                                      eps=1e-08, weight_decay=args.weight_decay)
                 
     optimizer.param_groups[0]['initial_lr'] = args.learning_rate 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=150, gamma=0.5, last_epoch = init_epoch - 1)
-    LEARNING_RATE_CLIP = 1e-5 
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.5, last_epoch = init_epoch - 1)
+    LEARNING_RATE_CLIP = 5e-5 
 
     # Get max, min teacher loss
-    # _, _, t_history = eval_sceneflow(t_model, train_loader)
+    _, _, t_history = eval_sceneflow(t_model, train_loader)
     history = defaultdict(lambda: list())
     best_epe = 1000.0
     for epoch in range(init_epoch, args.epochs):
@@ -164,14 +164,17 @@ def main():
             
             t_model.eval()
             with torch.no_grad():
-                t_pred_flows, t_fps_pc1_idxs, _, t_pc1, _, t_feat1s, _ = t_model(pos1, pos2, norm1, norm2)
+                t_pred_flows, t_fps_pc1_idxs, t_fps_pc2_idxs, t_pc1, t_pc2, t_feat1s, t_feat2s, t_crosses = t_model(pos1, pos2, norm1, norm2)
             st_model.train()         
-            pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, _, feat1s, _ = st_model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s, crosses = st_model(pos1, pos2, norm1, norm2)
             
-            loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
-            # loss = attentiveImitationLoss(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, t_history, 0.3)
-            # loss = biDirectionLoss(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows,  t_fps_pc1_idxs, 0.3, 1.0, 0.9)
-            # loss = loss_fn_ht(pred_flows, feat1s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_fps_pc1_idxs, 0.3, layer=3)
+            # loss = loss_functions.loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
+            # loss = loss_functions.attentiveImitationLoss(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, t_history, 0.3)
+            # loss = loss_functions.biDirectionLoss(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows,  t_fps_pc1_idxs, 0.3, 1.0, 0.9)
+            loss = loss_functions.cross_biDirection_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.3, 0.8,  layer=[2, 3])
+            # loss = loss_functions.cross_loss(pred_flows, cross, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_cross, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.3, 0.5)
+            # loss = loss_functions.biDirection_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, gamma, beta,  layer=3)
+            # loss = loss_functions.loss_fn_ht(pred_flows, feat1s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_fps_pc1_idxs, 0.3, layer=3)
 
             history['loss'].append(loss.cpu().data.numpy())
             loss.backward()
@@ -219,9 +222,9 @@ def eval_sceneflow(model, loader):
         flow = flow.cuda() 
 
         with torch.no_grad():
-            pred_flows, fps_pc1_idxs, _, _, _, _, _ = model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, _, _, _, _, _, _ = model(pos1, pos2, norm1, norm2)
 
-            eval_loss = multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
+            eval_loss = loss_functions.multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
             history.append(eval_loss)
             epe3d = torch.norm(pred_flows[0].permute(0, 2, 1) - flow, dim = 2).mean()
 
