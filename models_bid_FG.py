@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch
 import numpy as np
 import torch.nn.functional as F
-from pointconv_util2 import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLight as CrossLayer
+from pointconv_util2 import PointConv, PointConvD, PointConvWeight, PointWarpingSimple as PointWarping, UpsampleFlow, CrossLayerLightFG as CrossLayer
 from pointconv_util2 import SceneFlowEstimatorResidual
 from pointconv_util import index_points_gather as index_points, index_points_group, Conv1d, square_distance
 import time
@@ -12,7 +12,7 @@ scale = 1.0
 
 
 class PointConvBidirection(nn.Module):
-    def __init__(self):
+    def __init__(self, iters=2):
         super(PointConvBidirection, self).__init__()
 
         flow_nei = 32
@@ -22,31 +22,30 @@ class PointConvBidirection(nn.Module):
         #l0: 8192
         self.level0 = Conv1d(3, 32)
         self.level0_1 = Conv1d(32, 32)
-
+        self.level0_2 = Conv1d(32, 64)
         self.cross0 = CrossLayer(flow_nei, 32 + 32 , [32, 32], [32, 32])
         self.flow0 = SceneFlowEstimatorResidual(32 + 64, 32, weightnet = weightnet)
-        self.level0_2 = Conv1d(32, 64)
 
         #l1: 2048
         self.level1 = PointConvD(2048, feat_nei, 64 + 3, 64, weightnet = weightnet)
-        self.cross1 = CrossLayer(flow_nei, 64 + 32, [64, 64], [64, 64])
-        self.flow1 = SceneFlowEstimatorResidual(64 + 64, 64, weightnet = weightnet)
         self.level1_0 = Conv1d(64, 64)
         self.level1_1 = Conv1d(64, 128)
+        self.cross1 = CrossLayer(flow_nei, 64 + 32, [64, 64], [64, 64])
+        self.flow1 = SceneFlowEstimatorResidual(64 + 64, 64, weightnet = weightnet)
 
         #l2: 512
         self.level2 = PointConvD(512, feat_nei, 128 + 3, 128, weightnet = weightnet)
-        self.cross2 = CrossLayer(flow_nei, 128 + 64, [128, 128], [128, 128])
-        self.flow2 = SceneFlowEstimatorResidual(128 + 64, 128, weightnet = weightnet)
         self.level2_0 = Conv1d(128, 128)
         self.level2_1 = Conv1d(128, 256)
+        self.cross2 = CrossLayer(flow_nei, 128 + 64, [128, 128], [128, 128])
+        self.flow2 = SceneFlowEstimatorResidual(128 + 64, 128, weightnet = weightnet)
 
         #l3: 256
         self.level3 = PointConvD(256, feat_nei, 256 + 3, 256, weightnet = weightnet)
-        self.cross3 = CrossLayer(flow_nei, 256 + 64, [256, 256], [256, 256])
-        self.flow3 = SceneFlowEstimatorResidual(256, 256, weightnet = weightnet)
         self.level3_0 = Conv1d(256, 256)
         self.level3_1 = Conv1d(256, 512)
+        self.cross3 = CrossLayer(flow_nei, 256 + 64, [256, 256], [256, 256])
+        self.flow3 = SceneFlowEstimatorResidual(256, 256, weightnet = weightnet)
 
         #l4: 64
         self.level4 = PointConvD(64, feat_nei, 512 + 3, 256, weightnet = weightnet)
@@ -188,22 +187,24 @@ class PointConvBidirection(nn.Module):
 
         return flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s, crosses
 
-def multiScaleLoss(pred_flows, gt_flow, fps_idxs, alpha = [0.02, 0.04, 0.08, 0.16]):
+
+def multiScaleLoss(pred_flows, gt_flow, fps_idxs, alpha = [0.02, 0.02, 0.04, 0.04, 0.08, 0.08, 0.16]):
 
     #num of scale
     num_scale = len(pred_flows)
-    offset = len(fps_idxs) - num_scale + 1
-
     #generate GT list and mask1s
     gt_flows = [gt_flow]
-    for i in range(1, len(fps_idxs) + 1):
+    for i in range(1, len(fps_idxs)+1):
         fps_idx = fps_idxs[i - 1]
-        sub_gt_flow = index_points(gt_flows[-1], fps_idx) / scale
-        gt_flows.append(sub_gt_flow)
+        if fps_idx is not None:
+            sub_gt_flow = index_points(gt_flows[-1], fps_idx) / scale
+            gt_flows.append(sub_gt_flow)
+        else:
+            gt_flows.append(gt_flows[-1])
 
     total_loss = torch.zeros(1).cuda()
     for i in range(num_scale):
-        diff_flow = pred_flows[i].permute(0, 2, 1) - gt_flows[i + offset]
+        diff_flow = pred_flows[i].permute(0, 2, 1) - gt_flows[i]
         total_loss += alpha[i] * torch.norm(diff_flow, dim = 2).sum(dim = 1).mean()
 
     return total_loss
@@ -328,7 +329,7 @@ if __name__ == '__main__':
     import os
     import torch
     os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-    num_points = 2048
+    num_points = 8192
     input = torch.randn((1,num_points,3)).float().cuda()
     model = PointConvBidirection().cuda()
     # print(model)
@@ -343,6 +344,7 @@ if __name__ == '__main__':
         print(p.numel(), "\t", n, p.shape, )
     dump_input = torch.randn((1,num_points,3)).float().cuda()
     traced_model = torch.jit.trace(model, (dump_input, dump_input, dump_input, dump_input))
+    
     timer = 0
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)

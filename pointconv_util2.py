@@ -4,6 +4,7 @@ Author: Wenxuan Wu
 Date: May 2020
 """
 
+from cv2 import kmeans
 import torch 
 import torch.nn as nn 
 
@@ -13,6 +14,7 @@ import numpy as np
 from sklearn.neighbors import KernelDensity
 from pointnet2 import pointnet2_utils
 from vn_layers import *
+
 
 LEAKY_RATE = 0.1
 use_bn = False
@@ -429,6 +431,55 @@ class PointConvD(nn.Module):
 
         return new_xyz.permute(0, 2, 1), new_points, fps_idx
 
+class PointConvWeight(nn.Module):
+    def __init__(self, npoint, nsample, in_channel, out_channel, weightnet = 16, bn = use_bn, use_leaky = True):
+        super(PointConvWeight, self).__init__()
+        self.npoint = npoint
+        self.bn = bn
+        self.nsample = nsample
+        self.weightnet = WeightNet(3, weightnet)
+        self.linear = nn.Linear(weightnet * in_channel, out_channel)
+        if bn:
+            self.bn_linear = nn.BatchNorm1d(out_channel)
+        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
+
+    def forward(self, xyz, points):
+        """
+        PointConv with downsampling.
+        Input:
+            xyz: input points position data, [B, C, N]
+            points: input points data, [B, D, N]
+        Return:
+            new_xyz: sampled points position data, [B, C, S]
+            new_points_concat: sample points feature data, [B, D', S]
+        """
+        
+        #import ipdb; ipdb.set_trace()
+        B = xyz.shape[0]
+        N = xyz.shape[2]
+        xyz = xyz.permute(0, 2, 1)
+        points = points.permute(0, 2, 1)
+
+        fps_idx = pointnet2_utils.furthest_point_sample(xyz, self.npoint)
+        new_xyz = index_points_gather(xyz, fps_idx)
+
+        new_points, grouped_xyz_norm = group_query(self.nsample, xyz, new_xyz, points)
+        grouped_xyz = grouped_xyz_norm.permute(0, 3, 2, 1)
+        weights = self.weightnet(grouped_xyz)
+        # B, N, S, C
+        new_points = torch.matmul(input=new_points.permute(0, 1, 3, 2), other = weights.permute(0, 3, 2, 1)).view(B, self.npoint, -1)
+        new_points = self.linear(new_points)
+        if self.bn:
+            new_points = self.bn_linear(new_points.permute(0, 2, 1))
+        else:
+            new_points = new_points.permute(0, 2, 1)
+
+        new_points = self.relu(new_points)
+
+        return new_xyz.permute(0, 2, 1), new_points, fps_idx
+
+
+
 class PointConvSVDD(nn.Module):
     def __init__(self, npoint, nsample, in_channel, out_channel, weightnet = 16, bn = use_bn, use_leaky = True):
         super(PointConvSVDD, self).__init__()
@@ -573,52 +624,6 @@ class PointConvK(nn.Module):
 
         return new_points
 
-class PointConvDRand(nn.Module):
-    def __init__(self, npoint, nsample, in_channel, out_channel, weightnet = 16, bn = use_bn, use_leaky = True):
-        super(PointConvDRand, self).__init__()
-        self.npoint = npoint
-        self.bn = bn
-        self.nsample = nsample
-        self.weightnet = WeightNet(3, weightnet)
-        self.linear = nn.Linear(weightnet * in_channel, out_channel)
-        if bn:
-            self.bn_linear = nn.BatchNorm1d(out_channel)
-
-        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
-
-    def forward(self, xyz, points):
-        """
-        PointConv with downsampling.
-        Input:
-            xyz: input points position data, [B, C, N]
-            points: input points data, [B, D, N]
-        Return:
-            new_xyz: sampled points position data, [B, C, S]
-            new_points_concat: sample points feature data, [B, D', S]
-        """
-        #import ipdb; ipdb.set_trace()
-        B = xyz.shape[0]
-        N = xyz.shape[2]
-        xyz = xyz.permute(0, 2, 1)
-        points = points.permute(0, 2, 1)
-
-        new_xyz = xyz[:, :self.npoint, :]
-
-        new_points, grouped_xyz_norm = group_query(self.nsample, xyz, new_xyz, points)
-        grouped_xyz = grouped_xyz_norm.permute(0, 3, 2, 1)
-        weights = self.weightnet(grouped_xyz)
-        # B, N, S, C
-        new_points = torch.matmul(input=new_points.permute(0, 1, 3, 2), other = weights.permute(0, 3, 2, 1)).view(B, self.npoint, -1)
-        new_points = self.linear(new_points)
-        if self.bn:
-            new_points = self.bn_linear(new_points.permute(0, 2, 1))
-        else:
-            new_points = new_points.permute(0, 2, 1)
-
-        new_points = self.relu(new_points)
-
-        return new_xyz.permute(0, 2, 1), new_points#, fps_idx
-
 class SepConv(nn.Module):
     def __init__(self, nsample, in_channel, out_channel, weightnet = 16, bn = use_bn, use_leaky = True):
         super(SepConv, self).__init__()
@@ -672,74 +677,6 @@ class SepConv(nn.Module):
         new_points = self.relu(new_points)
 
         return new_points
-
-class PointConvW(nn.Module):
-    def __init__(self, npoint, nsample, in_channel, out_channel, bn = use_bn, use_leaky = True):
-        super(PointConvW, self).__init__()
-        self.npoint = npoint
-        self.bn = bn
-        self.nsample = nsample
-        self.kernel = nn.Sequential(
-            nn.Conv2d(in_channel, out_channel, 1, bias=False),
-            nn.BatchNorm2d(out_channel) if bn else nn.Identity(),
-            nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
-        )
-
-        self.linear = nn.Sequential(
-            nn.Conv1d(out_channel+nsample, out_channel+nsample, 1, bias=False),
-            nn.BatchNorm1d(out_channel+nsample) if bn else nn.Identity(),
-            nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
-        )
-
-        self.weight_point = nn.Sequential(
-            nn.Conv1d(nsample, nsample, 1, bias=False),
-            nn.Sigmoid()
-        )  
-
-        self.weight_channel = nn.Sequential(
-            nn.Conv1d(out_channel, out_channel, 1, bias=False),
-            nn.Sigmoid()
-        )        
-
-        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
-
-    def forward(self, xyz, points):
-        """
-        PointConv with downsampling.
-        Input:
-            xyz: input points position data, [B, C, N]
-            points: input points data, [B, D, N]
-        Return:
-            new_xyz: sampled points position data, [B, C, S]
-            new_points_concat: sample points feature data, [B, D', S]
-        """
-        #import ipdb; ipdb.set_trace()
-        B = xyz.shape[0]
-        N = xyz.shape[2]
-        C = points.shape[1]
-        xyz = xyz.permute(0, 2, 1)
-        points = points.permute(0, 2, 1)
-
-        fps_idx = pointnet2_utils.furthest_point_sample(xyz, self.npoint)
-        new_xyz = index_points_gather(xyz, fps_idx)
-
-        new_points, grouped_xyz_norm = group_query(self.nsample, xyz, new_xyz, points) # [B, npoint, nsample, C+D]
-        new_points = self.kernel(new_points.permute(0, 3, 1, 2)) # B, Out, N, S
-
-        channel_avg = torch.mean(new_points, -1) # B, C, N
-        point_avg = torch.mean(new_points, 1) # B, N, S
-
-        agg = torch.cat([channel_avg, point_avg.permute(0,2,1)], 1)# B, C+S, N
-
-        agg = self.linear(agg)
-
-        weight_point = self.weight_point(agg[:,-self.nsample:, ...]).permute(0,2,1).unsqueeze(1)# B, 1, N, S
-        weight_channel = self.weight_channel(agg[:,:-self.nsample, ...]).unsqueeze(-1)# B, C, N, 1
-
-        new_points = new_points * weight_channel * weight_point
-        new_points = torch.mean(new_points, -1)
-
-        return new_xyz.permute(0, 2, 1), new_points, fps_idx
 
 class LocalFeatureAggregation(nn.Module):
     def __init__(self, npoint, nsample, in_channel, out_channel, weightnet = 16, bn = use_bn, use_leaky = True):
@@ -1455,6 +1392,167 @@ class CrossLayer(nn.Module):
 
         return feat1_new, feat2_new, feat1_final
 
+
+class CrossLayerLight(nn.Module):
+    def __init__(self, nsample, in_channel, mlp1, mlp2, bn = use_bn, use_leaky = True):
+        super(CrossLayerLight,self).__init__()
+
+        self.nsample = nsample
+        self.bn = bn
+        self.pos1 = nn.Conv2d(3, mlp1[0], 1)
+        self.mlp1 = nn.ModuleList()
+        last_channel = in_channel
+        self.cross_t11 = nn.Conv1d(in_channel, mlp1[0], 1)
+        self.cross_t22 = nn.Conv1d(in_channel, mlp1[0], 1)
+        self.bias1 = nn.Parameter(torch.randn((1, mlp1[0], 1, 1)),requires_grad=True)
+        self.bn1 = nn.BatchNorm2d(mlp1[0]) if bn else nn.Identity()
+
+        for i in range(1, len(mlp1)):
+            self.mlp1.append(Conv2d(mlp1[i-1], mlp1[i], bn=bn, use_leaky=use_leaky))
+            last_channel = mlp1[i]
+        
+        self.mlp2 = True if mlp2 is not None else False
+
+        if mlp2 is not None:
+            self.cross_t1 = nn.Conv1d(mlp1[-1], mlp2[0], 1)
+            self.cross_t2 = nn.Conv1d(mlp1[-1], mlp2[0], 1)
+
+            self.pos2 = nn.Conv2d(3, mlp2[0], 1)
+            self.bias2 = nn.Parameter(torch.randn((1, mlp2[0], 1, 1)),requires_grad=True)
+            self.bn2 = nn.BatchNorm2d(mlp2[0]) if bn else nn.Identity()
+
+            self.mlp2 = nn.ModuleList()
+            for i in range(1, len(mlp2)):
+                self.mlp2.append(Conv2d(mlp2[i-1], mlp2[i], bn=bn, use_leaky=use_leaky))
+        
+        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
+
+
+    def cross(self, xyz1, xyz2, points1, points2, pos, mlp, bn):
+        B, C, N1 = xyz1.shape
+        _, _, N2 = xyz2.shape
+        _, D1, _ = points1.shape
+        _, D2, _ = points2.shape
+        xyz1 = xyz1.permute(0, 2, 1)
+        xyz2 = xyz2.permute(0, 2, 1)
+        points1 = points1.permute(0, 2, 1)
+        points2 = points2.permute(0, 2, 1)
+
+        knn_idx = knn_point(self.nsample, xyz2, xyz1) # B, N1, nsample
+        neighbor_xyz = index_points_group(xyz2, knn_idx)
+        direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
+        grouped_points2 = index_points_group(points2, knn_idx).permute(0, 3, 2, 1) # B, N1, nsample, D2
+        grouped_points1 = points1.view(B, N1, 1, D1).repeat(1, 1, self.nsample, 1).permute(0, 3, 2, 1)
+
+        direction_xyz = pos(direction_xyz.permute(0, 3, 2, 1))
+        new_points = self.relu(bn(grouped_points2 + grouped_points1 + direction_xyz))# B, N1, nsample, D1+D2+3
+
+        for i, conv in enumerate(mlp):
+            new_points = conv(new_points)
+        
+        new_points = F.max_pool2d(new_points, (new_points.size(2), 1)).squeeze(2)
+
+        return new_points
+
+    def forward(self, pc1, pc2, feat1, feat2):
+        # _, feat1_new = self.fe1_layer(pc1, pc2, feat1, feat2)
+        # _, feat2_new = self.fe1_layer(pc2, pc1, feat2, feat1)
+        # _, feat1_final = self.fe2_layer(pc1, pc2, feat1_new, feat2_new)
+        # flow1 = self.flow(feat1_final)
+
+        feat1_new = self.cross(pc1, pc2, self.cross_t11(feat1),  self.cross_t22(feat2), self.pos1, self.mlp1, self.bn1)
+        feat2_new = self.cross(pc2, pc1, self.cross_t11(feat2), self.cross_t22(feat1), self.pos1, self.mlp1, self.bn1)
+
+        if self.mlp2 is False:
+            return feat1_new, feat2_new
+
+        feat1_new = self.cross_t1(feat1_new)
+        feat2_new = self.cross_t2(feat2_new)
+        feat1_final = self.cross(pc1, pc2, feat1_new, feat2_new, self.pos2, self.mlp2, self.bn2)
+
+        return feat1_new, feat2_new, feat1_final
+
+
+# Feature Grouping
+class CrossLayerLightFG(nn.Module):
+    def __init__(self, nsample, in_channel, mlp1, mlp2, bn = use_bn, use_leaky = True):
+        super(CrossLayerLightFG,self).__init__()
+
+        self.nsample = nsample
+        self.bn = bn
+        self.pos1 = nn.Conv2d(3, mlp1[0], 1)
+        self.mlp1 = nn.ModuleList()
+        last_channel = in_channel
+        self.cross_t11 = nn.Conv1d(in_channel, mlp1[0], 1)
+        self.cross_t22 = nn.Conv1d(in_channel, mlp1[0], 1)
+        self.bias1 = nn.Parameter(torch.randn((1, mlp1[0], 1, 1)),requires_grad=True)
+        self.bn1 = nn.BatchNorm2d(mlp1[0]) if bn else nn.Identity()
+
+        for i in range(1, len(mlp1)):
+            self.mlp1.append(Conv2d(mlp1[i-1], mlp1[i], bn=bn, use_leaky=use_leaky))
+            last_channel = mlp1[i]
+        
+        self.mlp2 = True if mlp2 is not None else False
+
+        if mlp2 is not None:
+            self.cross_t1 = nn.Conv1d(mlp1[-1], mlp2[0], 1)
+            self.cross_t2 = nn.Conv1d(mlp1[-1], mlp2[0], 1)
+
+            self.pos2 = nn.Conv2d(3, mlp2[0], 1)
+            self.bias2 = nn.Parameter(torch.randn((1, mlp2[0], 1, 1)),requires_grad=True)
+            self.bn2 = nn.BatchNorm2d(mlp2[0]) if bn else nn.Identity()
+
+            self.mlp2 = nn.ModuleList()
+            for i in range(1, len(mlp2)):
+                self.mlp2.append(Conv2d(mlp2[i-1], mlp2[i], bn=bn, use_leaky=use_leaky))
+        
+        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
+
+
+    def cross(self, xyz1, xyz2, points1, points2, pos, mlp, bn):
+        B, C, N1 = xyz1.shape
+        _, _, N2 = xyz2.shape
+        _, D1, _ = points1.shape
+        _, D2, _ = points2.shape
+        xyz1 = xyz1.permute(0, 2, 1)
+        xyz2 = xyz2.permute(0, 2, 1)
+        points1 = points1.permute(0, 2, 1)
+        points2 = points2.permute(0, 2, 1)
+        knn_idx = knn_point(self.nsample, points2, points1) # B, N1, nsample
+        neighbor_xyz = index_points_group(xyz2, knn_idx)
+        direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
+        grouped_points2 = index_points_group(points2, knn_idx).permute(0, 3, 2, 1) # B, N1, nsample, D2
+        grouped_points1 = points1.view(B, N1, 1, D1).repeat(1, 1, self.nsample, 1).permute(0, 3, 2, 1)
+
+        direction_xyz = pos(direction_xyz.permute(0, 3, 2, 1))
+        new_points = self.relu(bn(grouped_points2 + grouped_points1 + direction_xyz))# B, N1, nsample, D1+D2+3
+
+        for i, conv in enumerate(mlp):
+            new_points = conv(new_points)
+        
+        new_points = F.max_pool2d(new_points, (new_points.size(2), 1)).squeeze(2)
+
+        return new_points
+
+    def forward(self, pc1, pc2, feat1, feat2):
+        # _, feat1_new = self.fe1_layer(pc1, pc2, feat1, feat2)
+        # _, feat2_new = self.fe1_layer(pc2, pc1, feat2, feat1)
+        # _, feat1_final = self.fe2_layer(pc1, pc2, feat1_new, feat2_new)
+        # flow1 = self.flow(feat1_final)
+
+        feat1_new = self.cross(pc1, pc2, self.cross_t11(feat1),  self.cross_t22(feat2), self.pos1, self.mlp1, self.bn1)
+        feat2_new = self.cross(pc2, pc1, self.cross_t11(feat2), self.cross_t22(feat1), self.pos1, self.mlp1, self.bn1)
+
+        if self.mlp2 is False:
+            return feat1_new, feat2_new
+
+        feat1_new = self.cross_t1(feat1_new)
+        feat2_new = self.cross_t2(feat2_new)
+        feat1_final = self.cross(pc1, pc2, feat1_new, feat2_new, self.pos2, self.mlp2, self.bn2)
+
+        return feat1_new, feat2_new, feat1_final
+
+
 class FlowEmbeddingLayer(nn.Module):
     def __init__(self, nsample, in_channel, mlp, bn = use_bn, use_leaky = True):
         super(FlowEmbeddingLayer,self).__init__()
@@ -1772,85 +1870,6 @@ class CrossLayerPoolLight(nn.Module):
 
         return feat1_new, feat2_new, feat1_final
 
-class CrossLayerLight(nn.Module):
-    def __init__(self, nsample, in_channel, mlp1, mlp2, bn = use_bn, use_leaky = True):
-        super(CrossLayerLight,self).__init__()
-
-        self.nsample = nsample
-        self.bn = bn
-        self.pos1 = nn.Conv2d(3, mlp1[0], 1)
-        self.mlp1 = nn.ModuleList()
-        last_channel = in_channel
-        self.cross_t11 = nn.Conv1d(in_channel, mlp1[0], 1)
-        self.cross_t22 = nn.Conv1d(in_channel, mlp1[0], 1)
-        self.bias1 = nn.Parameter(torch.randn((1, mlp1[0], 1, 1)),requires_grad=True)
-        self.bn1 = nn.BatchNorm2d(mlp1[0]) if bn else nn.Identity()
-
-        for i in range(1, len(mlp1)):
-            self.mlp1.append(Conv2d(mlp1[i-1], mlp1[i], bn=bn, use_leaky=use_leaky))
-            last_channel = mlp1[i]
-        
-        self.mlp2 = True if mlp2 is not None else False
-
-        if mlp2 is not None:
-            self.cross_t1 = nn.Conv1d(mlp1[-1], mlp2[0], 1)
-            self.cross_t2 = nn.Conv1d(mlp1[-1], mlp2[0], 1)
-
-            self.pos2 = nn.Conv2d(3, mlp2[0], 1)
-            self.bias2 = nn.Parameter(torch.randn((1, mlp2[0], 1, 1)),requires_grad=True)
-            self.bn2 = nn.BatchNorm2d(mlp2[0]) if bn else nn.Identity()
-
-            self.mlp2 = nn.ModuleList()
-            for i in range(1, len(mlp2)):
-                self.mlp2.append(Conv2d(mlp2[i-1], mlp2[i], bn=bn, use_leaky=use_leaky))
-        
-        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
-
-
-    def cross(self, xyz1, xyz2, points1, points2, pos, mlp, bn):
-        B, C, N1 = xyz1.shape
-        _, _, N2 = xyz2.shape
-        _, D1, _ = points1.shape
-        _, D2, _ = points2.shape
-        xyz1 = xyz1.permute(0, 2, 1)
-        xyz2 = xyz2.permute(0, 2, 1)
-        points1 = points1.permute(0, 2, 1)
-        points2 = points2.permute(0, 2, 1)
-
-        knn_idx = knn_point(self.nsample, xyz2, xyz1) # B, N1, nsample
-        neighbor_xyz = index_points_group(xyz2, knn_idx)
-        direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
-        grouped_points2 = index_points_group(points2, knn_idx).permute(0, 3, 2, 1) # B, N1, nsample, D2
-        grouped_points1 = points1.view(B, N1, 1, D1).repeat(1, 1, self.nsample, 1).permute(0, 3, 2, 1)
-
-        direction_xyz = pos(direction_xyz.permute(0, 3, 2, 1))
-        new_points = self.relu(bn(grouped_points2 + grouped_points1 + direction_xyz))# B, N1, nsample, D1+D2+3
-
-        for i, conv in enumerate(mlp):
-            new_points = conv(new_points)
-        
-        new_points = F.max_pool2d(new_points, (new_points.size(2), 1)).squeeze(2)
-
-        return new_points
-
-    def forward(self, pc1, pc2, feat1, feat2):
-        # _, feat1_new = self.fe1_layer(pc1, pc2, feat1, feat2)
-        # _, feat2_new = self.fe1_layer(pc2, pc1, feat2, feat1)
-        # _, feat1_final = self.fe2_layer(pc1, pc2, feat1_new, feat2_new)
-        # flow1 = self.flow(feat1_final)
-
-        feat1_new = self.cross(pc1, pc2, self.cross_t11(feat1),  self.cross_t22(feat2), self.pos1, self.mlp1, self.bn1)
-        feat2_new = self.cross(pc2, pc1, self.cross_t11(feat2), self.cross_t22(feat1), self.pos1, self.mlp1, self.bn1)
-
-        if self.mlp2 is False:
-            return feat1_new, feat2_new
-
-        feat1_new = self.cross_t1(feat1_new)
-        feat2_new = self.cross_t2(feat2_new)
-        feat1_final = self.cross(pc1, pc2, feat1_new, feat2_new, self.pos2, self.mlp2, self.bn2)
-
-        return feat1_new, feat2_new, feat1_final
-
 class CrossLayerLightUp(nn.Module):
     def __init__(self, nsample, in_channel_dense, in_channel_sparse, mlp1, mlp2=None, bn = use_bn, use_leaky = True):
         super(CrossLayerLightUp,self).__init__()
@@ -2091,6 +2110,13 @@ class PointWarping(nn.Module):
 
         return warped_xyz2
 
+class PointWarpingSimple(nn.Module):
+    
+    def forward(self, xyz1, xyz2, flow1 = None):
+        warped_xyz2 = xyz2 - flow1 # B 3 N2
+
+        return warped_xyz2
+
 class UpsampleFlow(nn.Module):
     def forward(self, xyz, sparse_xyz, sparse_flow):
         #import ipdb; ipdb.set_trace()
@@ -2107,7 +2133,6 @@ class UpsampleFlow(nn.Module):
         dist = torch.norm(grouped_xyz_norm, dim = 3).clamp(min = 1e-10)
         norm = torch.sum(1.0 / dist, dim = 2, keepdim = True)
         weight = (1.0 / dist) / norm 
-
         grouped_flow = index_points_group(sparse_flow, knn_idx)
         dense_flow = torch.sum(weight.view(B, N, 3, 1) * grouped_flow, dim = 2).permute(0, 2, 1)
         return dense_flow 

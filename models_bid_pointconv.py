@@ -681,8 +681,9 @@ from thop import profile, clever_format
 if __name__ == '__main__':
     import os
     import torch
-    os.environ["CUDA_VISIBLE_DEVICES"] = '3'
-    input = torch.randn((1,8192,3)).float().cuda()
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+    num_points = 4096
+    input = torch.randn((1,num_points,3)).float().cuda()
     model = PointConvBidirection().cuda()
     # model = PointConvBidStudentModel2().cuda()
     # print(model)
@@ -693,13 +694,20 @@ if __name__ == '__main__':
     total = sum([param.nelement() for param in model.parameters()])
     print("Number of parameter: %.2fM" % (total/1e6))
 
-    dump_input = torch.randn((1,8192,3)).float().cuda()
+    dump_input = torch.randn((1,num_points,3)).float().cuda()
     traced_model = torch.jit.trace(model, (dump_input, dump_input, dump_input, dump_input))
-    timer = 0
 
     timer = 0
     for i in range(100):
-        t = time.time()
-        _ = traced_model(input,input,input,input)
-        timer += time.time() - t
-    print(timer / 100.0)
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+
+        start.record()
+        _ = model(input,input,input,input)
+        end.record()
+
+        # Waits for everything to finish running
+        torch.cuda.synchronize()
+        timer += start.elapsed_time(end)
+
+    print(timer/100)

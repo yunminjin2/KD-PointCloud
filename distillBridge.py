@@ -45,7 +45,7 @@ def main():
     log_dir.mkdir(exist_ok=True)
     os.system('cp %s %s' % ('models.py', log_dir))
     os.system('cp %s %s' % ('pointconv_util.py', log_dir))
-    os.system('cp %s %s' % ('train.py', log_dir))
+    os.system('cp %s %s' % ('distillBridge.py', log_dir))
     os.system('cp %s %s' % ('config_train.yaml', log_dir))
 
     '''LOG'''
