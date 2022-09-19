@@ -1509,7 +1509,7 @@ class CrossLayerLightFG(nn.Module):
         self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
 
 
-    def cross(self, xyz1, xyz2, points1, points2, pos, mlp, bn):
+    def cross(self, xyz1, xyz2, points1, points2, knn1, knn2, pos, mlp, bn, nsample=None):
         B, C, N1 = xyz1.shape
         _, _, N2 = xyz2.shape
         _, D1, _ = points1.shape
@@ -1518,11 +1518,24 @@ class CrossLayerLightFG(nn.Module):
         xyz2 = xyz2.permute(0, 2, 1)
         points1 = points1.permute(0, 2, 1)
         points2 = points2.permute(0, 2, 1)
-        knn_idx = knn_point(self.nsample, points2, points1) # B, N1, nsample
-        neighbor_xyz = index_points_group(xyz2, knn_idx)
+        knn1 = knn1.permute(0, 2, 1)
+        knn2 = knn2.permute(0, 2, 1)
+
+        if nsample is None:
+            nsample=self.nsample
+
+        knn_idx = knn_point(nsample//2,  knn2, knn1) # B, N1, nsample
+        knn_idx_p = knn_point(nsample//2, xyz2, xyz1) # B, N1, nsample
+        neighbor_xyz = torch.cat((index_points_group(xyz2, knn_idx),index_points_group(xyz2, knn_idx_p)),-2)
         direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
-        grouped_points2 = index_points_group(points2, knn_idx).permute(0, 3, 2, 1) # B, N1, nsample, D2
-        grouped_points1 = points1.view(B, N1, 1, D1).repeat(1, 1, self.nsample, 1).permute(0, 3, 2, 1)
+        grouped_points2 =  torch.cat((index_points_group(points2, knn_idx).permute(0, 3, 2, 1),
+                                      index_points_group(points2, knn_idx_p).permute(0, 3, 2, 1)),-2)# B, N1, nsample, D2
+        # knn_idx = knn_point(nsample, xyz2, xyz1) # B, N1, nsample
+        # neighbor_xyz = index_points_group(xyz2, knn_idx)
+        # direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
+        # grouped_points2 = index_points_group(points2, knn_idx).permute(0, 3, 2, 1) # B, N1, nsample, D2
+
+        grouped_points1 = points1.view(B, N1, 1, D1).repeat(1, 1, nsample, 1).permute(0, 3, 2, 1)
 
         direction_xyz = pos(direction_xyz.permute(0, 3, 2, 1))
         new_points = self.relu(bn(grouped_points2 + grouped_points1 + direction_xyz))# B, N1, nsample, D1+D2+3
@@ -1534,23 +1547,21 @@ class CrossLayerLightFG(nn.Module):
 
         return new_points
 
-    def forward(self, pc1, pc2, feat1, feat2):
+    def forward(self, pc1, pc2, feat1, feat2, knn1, knn2):
         # _, feat1_new = self.fe1_layer(pc1, pc2, feat1, feat2)
         # _, feat2_new = self.fe1_layer(pc2, pc1, feat2, feat1)
         # _, feat1_final = self.fe2_layer(pc1, pc2, feat1_new, feat2_new)
         # flow1 = self.flow(feat1_final)
 
-        feat1_new = self.cross(pc1, pc2, self.cross_t11(feat1),  self.cross_t22(feat2), self.pos1, self.mlp1, self.bn1)
-        feat2_new = self.cross(pc2, pc1, self.cross_t11(feat2), self.cross_t22(feat1), self.pos1, self.mlp1, self.bn1)
-
-        if self.mlp2 is False:
-            return feat1_new, feat2_new
-
+        feat1_new = self.cross(pc1, pc2, self.cross_t11(feat1),  self.cross_t22(feat2), knn1, knn2, self.pos1, self.mlp1, self.bn1)
         feat1_new = self.cross_t1(feat1_new)
+        feat2_new = self.cross(pc2, pc1, self.cross_t11(feat2), self.cross_t22(feat1), knn2, knn1, self.pos1, self.mlp1, self.bn1)
         feat2_new = self.cross_t2(feat2_new)
-        feat1_final = self.cross(pc1, pc2, feat1_new, feat2_new, self.pos2, self.mlp2, self.bn2)
+
+        feat1_final = self.cross(pc1, pc2, feat1_new, feat2_new, knn1, knn2, self.pos2, self.mlp2, self.bn2)
 
         return feat1_new, feat2_new, feat1_final
+
 
 
 class FlowEmbeddingLayer(nn.Module):

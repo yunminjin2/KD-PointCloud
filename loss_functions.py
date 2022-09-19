@@ -97,8 +97,16 @@ def biDirection_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, 
 def flow_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, t_feat1s, t_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, beta, layer=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
     KD_loss = torch.zeros(1).cuda()
 
-    loss1 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+    num_scale = len(outputs)
+    offset = len(fps_idxs) - num_scale + 1
+
+    gt_flows = [gt_flow]
+    for i in range(1, len(fps_idxs) + 1):
+        fps_idx = fps_idxs[i - 1]
+        sub_gt_flow = index_points(gt_flows[-1], fps_idx) / scale
+        gt_flows.append(sub_gt_flow)
     
+
     loss2 = 0
     for i in range(len(outputs)):
         diff_flow = outputs[i].permute(0, 2, 1) - teacher_outputs[i].permute(0, 2, 1)
@@ -110,6 +118,46 @@ def flow_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher
     KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(0.5*src_hint_loss.sum() + 0.5*target_hint_loss.sum())
     return KD_loss
 
+def feat_diff(feat1, feat2):
+    return ((feat1-feat2).sum()**2).mean()/2
+
+def att_iter_loss(outputs, c_feat1s, c_feat2s, fps_idxs1, fps_idxs2, gt_flow, t_outputs, t_c_feat1s, t_c_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, layers=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
+    KD_loss = torch.zeros(1).cuda()
+    softmax = torch.nn.Softmax(dim=1).cuda()
+
+    loss1 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+        
+    loss2 = 0
+    gt_flows = [gt_flow]
+    for i in range(1, len(t_fps_idxs1) + 1):
+        fps_idxs = t_fps_idxs1[i - 1]
+        sub_gt_flow = index_points(gt_flows[-1], fps_idxs) / scale
+        gt_flows.append(sub_gt_flow)
+
+    hyper_params = []
+    for each_layer in layers:
+        diffs = []
+        for each_iter in range(len(t_outputs[each_layer])):
+            diffs.append(((t_outputs[each_layer][each_iter].permute(0, 2, 1) - gt_flows[each_layer])**2).sum(dim=1).sum(dim=1))
+        diffs = torch.stack(diffs, 1)
+  
+        hyper_params.append(1 - softmax(diffs))
+    hyper_params = torch.stack(hyper_params, 1).permute(2, 1, 0)
+
+    src_ht = torch.zeros(1).cuda()
+    # target_ht = torch.zeros(1).cuda()
+
+    for i, each_layer in enumerate(layers):
+        for each_iter in range(len(t_outputs[each_layer])):
+            tmp = torch.t(hyper_params[i][each_iter]) @ torch.norm(outputs[each_layer] -t_outputs[each_layer][each_iter], dim = 2).sum(dim = 1)
+            src_ht += alpha[each_layer] * tmp.mean()
+    # loss2 = 0.5*(src_ht + target_ht)
+
+    KD_loss += gamma*loss1 + (1-gamma)*src_ht
+    
+    return KD_loss
+    
+
 def cross_biDirection_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, t_feat1s, t_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, beta, layer=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
     KD_loss = torch.zeros(1).cuda()
 
@@ -118,13 +166,15 @@ def cross_biDirection_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_
     loss2 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
     
     src_hint_loss = torch.zeros(1).cuda()
-    target_hint_loss = torch.zeros(1).cuda()
+    
+    
+
     for each in layer:
-        src_hint_loss += ((feat1s[each]-t_feat2s[each])**2).sum()/2
-        target_hint_loss += ((feat2s[each]-t_feat1s[each])**2).sum()/2
+        t_feats = torch.cat([t_feat1s[each], t_feat2s[each]], dim=1)
+        src_hint_loss += ((feat1s[each]-t_feats)**2).sum()/2
 
 
-    KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(0.5*src_hint_loss + 0.5*target_hint_loss)
+    KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(src_hint_loss )
 
     return KD_loss
 

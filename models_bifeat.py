@@ -3,40 +3,40 @@ import torch.nn as nn
 import torch
 import numpy as np
 import torch.nn.functional as F
-from pointconv_util2 import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLight as CrossLayer
+from pointconv_util2 import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLightFG as CrossLayer
 from pointconv_util2 import SceneFlowEstimatorResidual
-from pointconv_util import index_points_gather as index_points, index_points_group, Conv1d, square_distance
+from pointconv_util2 import index_points_gather as index_points, index_points_group, Conv1d, square_distance
 import time
 
 scale = 1.0
 
 
 class PointConvBidirection(nn.Module):
-    def __init__(self):
+    def __init__(self, iters=2):
         super(PointConvBidirection, self).__init__()
 
         flow_nei = 32
-        feat_nei = 16
-        weightnet = 4
+        feat_nei = 32
+        weightnet = 8
         self.scale = scale
+        self.iters = iters
         #l0: 8192
-        self.level0 = Conv1d(3, 32)
-        self.level0_1 = Conv1d(32, 32)
-
+        self.level0_lift = Conv1d(3, 32)
+        self.level0 = PointConv(feat_nei, 32 + 3, 32, weightnet = weightnet)
         self.cross0 = CrossLayer(flow_nei, 32 + 32 , [32, 32], [32, 32])
-        self.flow0 = SceneFlowEstimatorResidual(32 + 64, 32, weightnet = weightnet)
-        self.level0_2 = Conv1d(32, 64)
+        self.flow0 = SceneFlowEstimatorResidual(32 + 64, 32, weightnet = weightnet, channels = [64, 64], mlp = [64, 64])
+        self.level0_1 = Conv1d(32, 64)
 
         #l1: 2048
         self.level1 = PointConvD(2048, feat_nei, 64 + 3, 64, weightnet = weightnet)
-        self.cross1 = CrossLayer(flow_nei, 64 + 32, [64, 64], [64, 64])
+        self.cross1 = CrossLayer(flow_nei, 64 + 64, [64, 64], [64, 64])
         self.flow1 = SceneFlowEstimatorResidual(64 + 64, 64, weightnet = weightnet)
         self.level1_0 = Conv1d(64, 64)
         self.level1_1 = Conv1d(64, 128)
 
         #l2: 512
         self.level2 = PointConvD(512, feat_nei, 128 + 3, 128, weightnet = weightnet)
-        self.cross2 = CrossLayer(flow_nei, 128 + 64, [128, 128], [128, 128])
+        self.cross2 = CrossLayer(flow_nei, 128 + 128, [128, 128], [128, 128])
         self.flow2 = SceneFlowEstimatorResidual(128 + 64, 128, weightnet = weightnet)
         self.level2_0 = Conv1d(128, 128)
         self.level2_1 = Conv1d(128, 256)
@@ -53,8 +53,8 @@ class PointConvBidirection(nn.Module):
 
         #deconv
         self.deconv4_3 = Conv1d(256, 64)
-        self.deconv3_2 = Conv1d(256, 64)
-        self.deconv2_1 = Conv1d(128, 32)
+        self.deconv3_2 = Conv1d(256, 128)
+        self.deconv2_1 = Conv1d(128, 64)
         self.deconv1_0 = Conv1d(64, 32)
 
         #warping
@@ -73,13 +73,13 @@ class PointConvBidirection(nn.Module):
         pc2_l0 = xyz2.permute(0, 2, 1)
         color1 = color1.permute(0, 2, 1) # B 3 N
         color2 = color2.permute(0, 2, 1) # B 3 N
-        feat1_l0 = self.level0(color1)
-        feat1_l0 = self.level0_1(feat1_l0)
-        feat1_l0_1 = self.level0_2(feat1_l0)
+        feat1_l0 = self.level0_lift(color1)
+        feat1_l0 = self.level0(pc1_l0, feat1_l0)
+        feat1_l0_1 = self.level0_1(feat1_l0)
 
-        feat2_l0 = self.level0(color2)
-        feat2_l0 = self.level0_1(feat2_l0)
-        feat2_l0_1 = self.level0_2(feat2_l0)
+        feat2_l0 = self.level0_lift(color2)
+        feat2_l0 = self.level0(pc2_l0,feat2_l0)
+        feat2_l0_1 = self.level0_1(feat2_l0)
 
         #l1
         pc1_l1, feat1_l1, fps_pc1_l1 = self.level1(pc1_l0, feat1_l0_1)
@@ -120,7 +120,7 @@ class PointConvBidirection(nn.Module):
         #l3
         c_feat1_l3 = torch.cat([feat1_l3, feat1_l4_3], dim = 1)
         c_feat2_l3 = torch.cat([feat2_l3, feat2_l4_3], dim = 1)
-        feat1_new_l3, feat2_new_l3, cross3 = self.cross3(pc1_l3, pc2_l3, c_feat1_l3, c_feat2_l3)
+        feat1_new_l3, feat2_new_l3, cross3 = self.cross3(pc1_l3, pc2_l3, c_feat1_l3, c_feat2_l3, feat1_l3, feat2_l3)
         feat3, flow3 = self.flow3(pc1_l3, feat1_l3, cross3)
 
         feat1_l3_2 = self.upsample(pc1_l2, pc1_l3, feat1_new_l3)
@@ -134,12 +134,24 @@ class PointConvBidirection(nn.Module):
 
         #l2
         up_flow2 = self.upsample(pc1_l2, pc1_l3, self.scale * flow3)
-        pc2_l2_warp = self.warping(pc1_l2, pc2_l2, up_flow2)
-        feat1_new_l2, feat2_new_l2, cross2 = self.cross2(pc1_l2, pc2_l2_warp, c_feat1_l2, c_feat2_l2)
+        feat2_up = self.upsample(pc1_l2, pc1_l3, feat3)
+        c_feat1s_l2 = [c_feat1_l2]
+        c_feat2s_l2 = [c_feat2_l2]
+        flows2 = []
+        for i in range(self.iters):
+            pc2_l2_warp = self.warping(pc1_l2, pc2_l2, up_flow2)
+            feat1_new_l2, feat2_new_l2, cross2 = self.cross2(pc1_l2, pc2_l2_warp, c_feat1_l2, c_feat2_l2, feat1_l2, feat2_l2)
 
-        feat3_up = self.upsample(pc1_l2, pc1_l3, feat3)
-        new_feat1_l2 = torch.cat([feat1_l2, feat3_up], dim = 1)
-        feat2, flow2 = self.flow2(pc1_l2, new_feat1_l2, cross2, up_flow2)
+            new_feat1_l2 = torch.cat([feat1_l2, feat2_up], dim = 1)
+            feat2, flow2 = self.flow2(pc1_l2, new_feat1_l2, cross2, up_flow2)
+            up_flow2 = flow2
+            feat2_up = feat2
+            c_feat1_l2 = torch.cat([feat1_l2, feat1_new_l2], dim = 1)
+            c_feat2_l2 = torch.cat([feat2_l2, feat2_new_l2], dim = 1)
+
+            c_feat1s_l2.append(c_feat1_l2)
+            c_feat2s_l2.append(c_feat2_l2)
+            flows2.append(flow2)
 
         feat1_l2_1 = self.upsample(pc1_l1, pc1_l2, feat1_new_l2)
         feat1_l2_1 = self.deconv2_1(feat1_l2_1)
@@ -152,12 +164,24 @@ class PointConvBidirection(nn.Module):
 
         #l1
         up_flow1 = self.upsample(pc1_l1, pc1_l2, self.scale * flow2)
-        pc2_l1_warp = self.warping(pc1_l1, pc2_l1, up_flow1)
-        feat1_new_l1, feat2_new_l1, cross1 = self.cross1(pc1_l1, pc2_l1_warp, c_feat1_l1, c_feat2_l1)
+        feat1_up = self.upsample(pc1_l1, pc1_l2, feat2)
+        c_feat1s_l1 = [c_feat1_l1]
+        c_feat2s_l1 = [c_feat2_l1]
+        flows1 = []
+        for i in range(self.iters):
+            pc2_l1_warp = self.warping(pc1_l1, pc2_l1, up_flow1)
+            feat1_new_l1, feat2_new_l1, cross1 = self.cross1(pc1_l1, pc2_l1_warp, c_feat1_l1, c_feat2_l1, feat1_l1, feat2_l1)
 
-        feat2_up = self.upsample(pc1_l1, pc1_l2, feat2)
-        new_feat1_l1 = torch.cat([feat1_l1, feat2_up], dim = 1)
-        feat1, flow1 = self.flow1(pc1_l1, new_feat1_l1, cross1, up_flow1)
+            new_feat1_l1 = torch.cat([feat1_l1, feat1_up], dim = 1)
+            feat1, flow1 = self.flow1(pc1_l1, new_feat1_l1, cross1, up_flow1)
+            up_flow1 = flow1
+            feat1_up = feat1
+            c_feat1_l1 = torch.cat([feat1_l1, feat1_new_l1], dim = 1)
+            c_feat2_l1 = torch.cat([feat2_l1, feat2_new_l1], dim = 1)
+
+            c_feat1s_l1.append(c_feat1_l1)
+            c_feat2s_l1.append(c_feat2_l1)
+            flows1.append(flow1)
 
         feat1_l1_0 = self.upsample(pc1_l0, pc1_l1, feat1_new_l1)
         feat1_l1_0 = self.deconv1_0(feat1_l1_0)
@@ -170,41 +194,62 @@ class PointConvBidirection(nn.Module):
 
         #l0
         up_flow0 = self.upsample(pc1_l0, pc1_l1, self.scale * flow1)
-        pc2_l0_warp = self.warping(pc1_l0, pc2_l0, up_flow0)
-        _, _, cross0 = self.cross0(pc1_l0, pc2_l0_warp, c_feat1_l0, c_feat2_l0)
+        feat0_up = self.upsample(pc1_l0, pc1_l1, feat1)
+        c_feat1s_l0 = [c_feat1_l0]
+        c_feat2s_l0 = [c_feat2_l0]
+        flows0 = []
+        for i in range(self.iters):
+            pc2_l0_warp = self.warping(pc1_l0, pc2_l0, up_flow0)
+            feat1_new_l0, feat2_new_l0, cross0 = self.cross0(pc1_l0, pc2_l0_warp, c_feat1_l0, c_feat2_l0, feat1_l0, feat2_l0)
 
-        feat1_up = self.upsample(pc1_l0, pc1_l1, feat1)
-        new_feat1_l0 = torch.cat([feat1_l0, feat1_up], dim = 1)
-        _, flow0 = self.flow0(pc1_l0, new_feat1_l0, cross0, up_flow0)
+            new_feat1_l0 = torch.cat([feat1_l0, feat0_up], dim = 1)
+            feat0, flow0 = self.flow0(pc1_l0, new_feat1_l0, cross0, up_flow0)
+            up_flow0 = flow0
+            feat0_up = feat0
+            c_feat1_l0 = torch.cat([feat1_l0, feat1_new_l0], dim = 1)
+            c_feat2_l0 = torch.cat([feat2_l0, feat2_new_l0], dim = 1)
 
-        flows = [flow0, flow1, flow2, flow3]
+            c_feat1s_l0.append(c_feat1_l0)
+            c_feat2s_l0.append(c_feat2_l0)
+            flows0.append(flow0)
+            
+        flows = [flows0, flows1, flows2, flow3]
         pc1 = [pc1_l0, pc1_l1, pc1_l2, pc1_l3]
         pc2 = [pc2_l0, pc2_l1, pc2_l2, pc2_l3]
         fps_pc1_idxs = [fps_pc1_l1, fps_pc1_l2, fps_pc1_l3]
         fps_pc2_idxs = [fps_pc2_l1, fps_pc2_l2, fps_pc2_l3]
-        feat1s = [feat1_l0_1, feat1_l1_2, feat1_l2_3, feat1_l3_4, feat1_l3_2, feat1_l2_1, feat1_l1_0]
-        feat2s = [feat2_l0_1, feat2_l1_2, feat2_l2_3, feat2_l3_4, feat2_l3_2, feat2_l2_1, feat2_l1_0]
+        feat1s = [feat1_l0_1, feat1_l1_2, feat1_l2_3, feat1_l3_4, feat1_l4, feat1_l3_2, feat1_l2_1, feat1_l1_0]
+        feat2s = [feat2_l0_1, feat2_l1_2, feat2_l2_3, feat2_l3_4, feat2_l4,  feat2_l3_2, feat2_l2_1, feat2_l1_0]
+        c_feat1s = [c_feat1s_l0[:-1], c_feat1s_l1[:-1], c_feat1s_l2[:-1]]
+        c_feat2s = [c_feat2s_l0[:-1], c_feat2s_l1[:-1], c_feat2s_l2[:-1]]
         crosses = [cross0, cross1, cross2, cross3]
 
-        return flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s, crosses
+        return flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s, c_feat1s, c_feat2s, crosses
+
 
 def multiScaleLoss(pred_flows, gt_flow, fps_idxs, alpha = [0.02, 0.04, 0.08, 0.16]):
 
     #num of scale
     num_scale = len(pred_flows)
-    offset = len(fps_idxs) - num_scale + 1
-
     #generate GT list and mask1s
     gt_flows = [gt_flow]
-    for i in range(1, len(fps_idxs) + 1):
+    alphas = [alpha[0]]
+    a = 0
+    for i in range(1, len(fps_idxs)+1):
         fps_idx = fps_idxs[i - 1]
-        sub_gt_flow = index_points(gt_flows[-1], fps_idx) / scale
-        gt_flows.append(sub_gt_flow)
+        if fps_idx is not None:
+            sub_gt_flow = index_points(gt_flows[-1], fps_idx) / scale
+            gt_flows.append(sub_gt_flow)
+            a += 1
+            alphas.append(alpha[a])
+        else:
+            gt_flows.append(gt_flows[-1])
+            alphas.append(alpha[a])
 
     total_loss = torch.zeros(1).cuda()
     for i in range(num_scale):
-        diff_flow = pred_flows[i].permute(0, 2, 1) - gt_flows[i + offset]
-        total_loss += alpha[i] * torch.norm(diff_flow, dim = 2).sum(dim = 1).mean()
+        diff_flow = pred_flows[i].permute(0, 2, 1) - gt_flows[i]
+        total_loss += alphas[i] * torch.norm(diff_flow, dim = 2).sum(dim = 1).mean()
 
     return total_loss
 
@@ -328,8 +373,7 @@ if __name__ == '__main__':
     import os
     import torch
     os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-    num_points = 8192
-    input = torch.randn((1,num_points,3)).float().cuda()
+    input = torch.randn((1,4096,3)).float().cuda()
     model = PointConvBidirection().cuda()
     # print(model)
     output = model(input,input,input,input)
@@ -339,14 +383,11 @@ if __name__ == '__main__':
     total = sum([param.nelement() for param in model.parameters()])
     print("Number of parameter: %.2fM" % (total/1e6))
 
-    # for n,p in model.named_parameters():
-    #     print(p.numel(), "\t", n, p.shape, )
-    # dump_input = torch.randn((1,num_points,3)).float().cuda()
-    # traced_model = torch.jit.trace(model, (dump_input, dump_input, dump_input, dump_input))
+    # Check inference time
     timer = 0
     start = torch.cuda.Event(enable_timing=True)
     end = torch.cuda.Event(enable_timing=True)
-    
+
     for i in range(10):
         _ = model(input,input,input,input)
     with torch.no_grad():
