@@ -11,9 +11,9 @@ import datetime
 import logging
 
 from tqdm import tqdm 
-from models_bid_pointconv import PointConvBidirection
-from models_bid_lighttoken_res import PointConvBidirection as PointConvStudentModel
-from loss_functions import  multiScaleLoss, attentiveImitationLoss, biDirectionLoss, loss_fn_kd_2, loss_fn_ht, biDirection_loss_ht
+from models_bifeat import PointConvBidirection
+from models_bid_FG import PointConvBidirection as PointConvStudentModel
+import loss_functions
 from pathlib import Path
 from collections import defaultdict
 
@@ -35,7 +35,7 @@ def main():
     '''CREATE DIR'''
     experiment_dir = Path('./experiment/')
     experiment_dir.mkdir(exist_ok=True)
-    file_dir = Path(str(experiment_dir) + '/lighttoken_res4_bidirht' + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')))
+    file_dir = Path(str(experiment_dir) + '/test_ht' + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')))
     file_dir.mkdir(exist_ok=True)
     checkpoints_dir = file_dir.joinpath('checkpoints/')
     checkpoints_dir.mkdir(exist_ok=True)
@@ -103,6 +103,7 @@ def main():
     t_model = PointConvBidirection()
     t_model.load_state_dict(torch.load(teacher_model_path))
     st_model = PointConvStudentModel()
+    # st_model.load_state_dict(torch.load(teacher_model_path))
 
     '''GPU selection and multi-GPU'''
     if args.multi_gpu is not None:
@@ -151,8 +152,9 @@ def main():
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
-        # gamma = distillSchedule(epoch, _upto=30)
-        # print("gamma: ", gamma)
+        gamma = distillSchedule(epoch, 0.3, 0, 360)
+        beta = distillSchedule(epoch, 0.8, 1, 360)
+        print("gamma: ", gamma)
         total_loss = 0
         total_seen = 0
         optimizer.zero_grad()
@@ -167,15 +169,19 @@ def main():
             
             t_model.eval()
             with torch.no_grad():
-                t_pred_flows, t_fps_pc1_idxs, t_fps_pc2_idxs, t_pc1, t_pc2, t_feat1s, t_feat2s = t_model(pos1, pos2, norm1, norm2)
+                t_pred_flows, t_fps_pc1_idxs, t_fps_pc2_idxs, t_pc1, t_pc2, t_feat1s, t_feat2s, t_c_feat1s, t_c_feat2s, t_cross = t_model(pos1, pos2, norm1, norm2)
             st_model.train()         
-            pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s = st_model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, feat1s, feat2s, c_feat1s, c_feat2s, cross = st_model(pos1, pos2, norm1, norm2)
             
-            # loss = loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
-            # loss = attentiveImitationLoss(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, t_history, 0.3)
-            # loss = biDirectionLoss(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows,  t_fps_pc1_idxs, 0.3, 1.0, 0.9)
-            loss = biDirection_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.3, 0.8,  layer=3)
-            # loss = loss_fn_ht(pred_flows, feat1s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_fps_pc1_idxs, 0.3, layer=3)
+            # loss = loss_functions.loss_fn_kd_2(pred_flows, fps_pc1_idxs, flow, t_pred_flows, t_fps_pc1_idxs, 0.3)
+            # loss = loss_functions.biDirectionLoss(pred_flows, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows,  t_fps_pc1_idxs, 0.3, 1.0, 0.9)
+            # loss = loss_functions.cross_biDirection_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.3, 0.7, [3, 4])
+            # loss = loss_functions.cross_loss(pred_flows, cross, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_cross, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.3, 0.5)
+            # loss = loss_functions.biDirection_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, gamma, beta,  layer=3)
+            # loss = loss_functions.flow_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.3, 0.7,  layer=3)
+            # loss = loss_functions.loss_fn_ht(pred_flows, feat1s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_fps_pc1_idxs, 0.3, layer=3)
+            # loss = loss_functions.att_iter_loss(pred_flows, c_feat1s, c_feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_c_feat1s, t_c_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.7, layers=[1, 2])
+            loss = loss_functions.att_ht_loss(pred_flows, c_feat1s, c_feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_c_feat1s, t_c_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.7, layers=[1, 2])
 
             history['loss'].append(loss.cpu().data.numpy())
             loss.backward()
@@ -225,9 +231,9 @@ def eval_sceneflow(model, loader):
         flow = flow.cuda() 
 
         with torch.no_grad():
-            pred_flows, fps_pc1_idxs, _, _, _, _, _ = model(pos1, pos2, norm1, norm2)
+            pred_flows, fps_pc1_idxs, _, _, _, _, _, _, _, _ = model(pos1, pos2, norm1, norm2)
 
-            eval_loss = multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
+            eval_loss = loss_functions.multiScaleLoss(pred_flows, flow, fps_pc1_idxs)
             history.append(eval_loss)
             epe3d = torch.norm(pred_flows[0].permute(0, 2, 1) - flow, dim = 2).mean()
 
@@ -290,7 +296,7 @@ def analyzing():
     t_model.load_state_dict(torch.load(teacher_model_path))
     t_model.cuda()
 
-    st_model = PointConvBidStudentModel()
+    st_model = PointConvStudentModel()
     st_model.cuda()
 
 
@@ -303,15 +309,12 @@ def analyzing():
         norm1 = norm1.cuda()
         norm2 = norm2.cuda()
         flow = flow.cuda()
-
-        t_model.eval()
-        with torch.no_grad():
-            t_pred_flows, t_fps_pc1_idxs, t_fps_pc2_idxs, t_pc1, t_pc2, _, _ = t_model(pos1, pos2, norm1, norm2)
+        print(pos1[0][0], pos2[0][0], norm1[0][0], norm2[0][0], flow[0][0])
         st_model.train()
-        pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, _, _ = st_model(pos1, pos2, norm1, norm2)
+        pred_flows, fps_pc1_idxs, fps_pc2_idxs, pc1, pc2, _, _, _ = st_model(pos1, pos2, norm1, norm2)
         gt_flows = [flow]
-        for i in range(1, len(t_fps_pc1_idxs) + 1):
-            fps_idx = t_fps_pc1_idxs[i - 1]
+        for i in range(1, len(fps_pc1_idxs) + 1):
+            fps_idx = fps_pc1_idxs[i - 1]
             sub_gt_flow = index_points(gt_flows[-1], fps_idx)
             gt_flows.append(sub_gt_flow)
 
@@ -321,20 +324,16 @@ def analyzing():
  
         for i in range(0, 50):
                 
-            print(pos1[0][0][i], pos1[0][1][i], pos1[0][2][i], " -- ", t_pc1[1][0][0][i], t_pc1[1][0][1][i], t_pc1[1][0][2][i], "[", t_fps_pc1_idxs[0][0][i], "]")
-            print(pos2[0][0][i], pos2[0][1][i], pos2[0][2][i], " -- ", t_pc2[1][0][0][i], t_pc2[1][0][1][i], t_pc2[1][0][2][i], "[", t_fps_pc2_idxs[0][0][i], "]")
-
-            print(flow[0][0][i], flow[0][1][i], flow[0][2][i], " -- ", t_pred_flows[0][0][0][i], t_pred_flows[0][0][1][i], t_pred_flows[0][0][2][i])
+            print(pos1[0][0][i], pos1[0][1][i], pos1[0][2][i], " -- ")
+            print(pos2[0][0][i], pos2[0][1][i], pos2[0][2][i], " -- ")
+            print(flow[0][0][i], flow[0][1][i], flow[0][2][i], " -- ")
 
         break
 # ______________________    ____
 
-def distillSchedule(cur, _from=0, _upto=100):
-    if cur > _upto:
-        return 0
-    elif cur < _from:
-        return 1
-    return 1 - (cur + 1)/(_upto + 1)
+def distillSchedule(cur, base, after, flag):
+    if cur < flag: return base
+    else: return after
 
 def to_np(t):
     result = []

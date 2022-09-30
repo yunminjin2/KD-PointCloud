@@ -19,6 +19,7 @@ def multiScaleLoss(pred_flows, gt_flow, fps_idxs, alpha = [0.02, 0.04, 0.08, 0.1
     total_loss = torch.zeros(1).cuda()
     for i in range(num_scale):
         diff_flow = pred_flows[i].permute(0, 2, 1) - gt_flows[i + offset]
+        
         total_loss += alpha[i] * torch.norm(diff_flow, dim = 2).sum(dim = 1).mean()
 
     return total_loss
@@ -118,8 +119,6 @@ def flow_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher
     KD_loss += beta*(gamma*loss1 + (1-gamma)*loss2) + (1-beta)*(0.5*src_hint_loss.sum() + 0.5*target_hint_loss.sum())
     return KD_loss
 
-def feat_diff(feat1, feat2):
-    return ((feat1-feat2).sum()**2).mean()/2
 
 def att_iter_loss(outputs, c_feat1s, c_feat2s, fps_idxs1, fps_idxs2, gt_flow, t_outputs, t_c_feat1s, t_c_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, layers=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
     KD_loss = torch.zeros(1).cuda()
@@ -134,29 +133,66 @@ def att_iter_loss(outputs, c_feat1s, c_feat2s, fps_idxs1, fps_idxs2, gt_flow, t_
         sub_gt_flow = index_points(gt_flows[-1], fps_idxs) / scale
         gt_flows.append(sub_gt_flow)
 
-    hyper_params = []
+    distil_ratios = []
     for each_layer in layers:
         diffs = []
         for each_iter in range(len(t_outputs[each_layer])):
             diffs.append(((t_outputs[each_layer][each_iter].permute(0, 2, 1) - gt_flows[each_layer])**2).sum(dim=1).sum(dim=1))
         diffs = torch.stack(diffs, 1)
   
-        hyper_params.append(1 - softmax(diffs))
-    hyper_params = torch.stack(hyper_params, 1).permute(2, 1, 0)
+        distil_ratios.append(1 - softmax(diffs))
+    distil_ratios = torch.stack(distil_ratios, 1).permute(2, 1, 0)
 
     src_ht = torch.zeros(1).cuda()
     # target_ht = torch.zeros(1).cuda()
 
     for i, each_layer in enumerate(layers):
         for each_iter in range(len(t_outputs[each_layer])):
-            tmp = torch.t(hyper_params[i][each_iter]) @ torch.norm(outputs[each_layer] -t_outputs[each_layer][each_iter], dim = 2).sum(dim = 1)
+            diff = torch.norm(outputs[each_layer].permute(0, 2, 1) -t_outputs[each_layer][each_iter].permute(0, 2, 1), dim = 2).sum(dim = 1)
+            tmp = torch.t(distil_ratios[i][each_iter]) @ diff
             src_ht += alpha[each_layer] * tmp.mean()
     # loss2 = 0.5*(src_ht + target_ht)
 
     KD_loss += gamma*loss1 + (1-gamma)*src_ht
     
     return KD_loss
+
+def att_ht_loss(outputs, c_feat1s, c_feat2s, fps_idxs1, fps_idxs2, gt_flow, t_outputs, t_c_feat1s, t_c_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, layers=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
+    KD_loss = torch.zeros(1).cuda()
+    softmax = torch.nn.Softmax(dim=1).cuda()
+
+    loss1 = multiScaleLoss(outputs, gt_flow, fps_idxs1)
+        
+    loss2 = 0
+    gt_flows = [gt_flow]
+    for i in range(1, len(t_fps_idxs1) + 1):
+        fps_idxs = t_fps_idxs1[i - 1]
+        sub_gt_flow = index_points(gt_flows[-1], fps_idxs) / scale
+        gt_flows.append(sub_gt_flow)
+
+    distil_ratios = []
+    for each_layer in layers:
+        diffs = []
+        for each_iter in range(len(t_outputs[each_layer])):
+            diffs.append(((t_outputs[each_layer][each_iter].permute(0, 2, 1) - gt_flows[each_layer])**2).sum(dim=1).sum(dim=1))
+        diffs = torch.stack(diffs, 1)
+  
+        distil_ratios.append(1 - softmax(diffs))
+    distil_ratios = torch.stack(distil_ratios, 1).permute(2, 1, 0)
+
+    src_ht = torch.zeros(1).cuda()
+    target_ht = torch.zeros(1).cuda()
+
+    for i, each_layer in enumerate(layers):
+        for each_iter in range(len(t_outputs[each_layer])):
+            diff_ht = torch.norm(((c_feat1s[each_layer] - t_c_feat1s[each_layer][each_iter])**2)/2 , dim=2).sum(dim=1)
+            tmp = torch.t(distil_ratios[i][each_iter]) @ diff_ht
+            src_ht += alpha[each_layer] * tmp.mean()
+    # loss2 = 0.5*(src_ht + target_ht)
+
+    KD_loss += gamma*loss1 + (1-gamma)*src_ht
     
+    return KD_loss
 
 def cross_biDirection_loss_ht(outputs, feat1s, feat2s, fps_idxs1, fps_idxs2, gt_flow, teacher_outputs, t_feat1s, t_feat2s, t_fps_idxs1, t_fps_idxs2, gamma, beta, layer=0,  alpha=[0.02, 0.04, 0.08, 0.16]):
     KD_loss = torch.zeros(1).cuda()
