@@ -188,9 +188,13 @@ def att_ht_loss(outputs, c_feat1s, c_feat2s, fps_idxs1, fps_idxs2, gt_flow, t_ou
             diff_ht = torch.norm(((c_feat1s[each_layer] - t_c_feat1s[each_layer][each_iter])**2)/2 , dim=2).sum(dim=1)
             tmp = torch.t(distil_ratios[i][each_iter]) @ diff_ht
             src_ht += alpha[each_layer] * tmp.mean()
-    # loss2 = 0.5*(src_ht + target_ht)
+            diff_ht = torch.norm(((c_feat2s[each_layer] - t_c_feat2s[each_layer][each_iter])**2)/2 , dim=2).sum(dim=1)
+            tmp = torch.t(distil_ratios[i][each_iter]) @ diff_ht
+            target_ht += alpha[each_layer] * tmp.mean()
 
-    KD_loss += gamma*loss1 + (1-gamma)*src_ht
+    loss2 = 0.5*(src_ht + target_ht)
+
+    KD_loss += gamma*loss1 + (1-gamma)*loss2
     
     return KD_loss
 
