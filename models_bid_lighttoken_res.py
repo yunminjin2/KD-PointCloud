@@ -17,7 +17,7 @@ class PointConvBidirection(nn.Module):
 
         flow_nei = 32
         feat_nei = 16
-        weightnet = 4
+        weightnet = 16
         self.scale = scale
         #l0: 8192
         self.level0 = Conv1d(3, 32)
