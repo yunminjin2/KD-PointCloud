@@ -3,3 +3,7 @@ datasets/FlyingThings3D_subset_processed_35m
 experiment/*
 Evaluate_experiment/*
 *.npy
+
+!experiment/blending_kd/logs/
+!experiment/blending_hint_kd/logs/
+
