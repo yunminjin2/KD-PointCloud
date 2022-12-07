@@ -10,15 +10,17 @@ last_relu: False
 allow_less_points: False
 
 # general args
-batch_size: 2
+batch_size: 8
 epochs: 560
 learning_rate: 0.001
 
 ckpt_dir: ./pretrain_weights/PointConv/
-teacher_model: models_bid_lighttoken_res_369_0.0288.pth
+# teacher_model: models_bid_lighttoken_res_369_0.0288.pth
+teacher_model: models_bifeat_iter_514_0.0245.pth
+
 optimizer: Adam
-pretrain: null
-# pretrain: ./experiment/PointConvPointConvFlyingthings3d-2022-07-10_13-22/checkpoints/PointConv_337_0.0692.pth
+pretrain: null # "./experiment/NonLinear_HTLoss/checkpoints/PointConv_349_0.0452.pth"
+
 weight_decay: 0.0001
 
 dim: 3
@@ -28,8 +30,8 @@ DEVICE: cuda
 
 evaluate: False
 
-dataset: FlyingThings3DSubsetMin
-data_root: D:/AI_Pracrice/data
+dataset:  FlyingThings3DSubset 
+data_root: /workspace/Bi-pointFlowNet/dataset
 
 data_process:
   DEPTH_THRESHOLD: 35.
@@ -51,7 +53,7 @@ aug_pc2:
   jitter_clip: 0.00
 
 # miscalleneous
-workers: 0
+workers: 2
 
 
 

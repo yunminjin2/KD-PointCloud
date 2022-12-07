@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch
 import numpy as np
 import torch.nn.functional as F
-from pointconv_util2 import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLightFG as CrossLayer
-from pointconv_util2 import SceneFlowEstimatorResidual
-from pointconv_util2 import index_points_gather as index_points, index_points_group, Conv1d, square_distance
+from pointconv_util import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLightFG as CrossLayer
+from pointconv_util import SceneFlowEstimatorResidual
+from pointconv_util import index_points_gather as index_points, index_points_group, Conv1d, square_distance
 import time
 
 scale = 1.0
@@ -213,7 +213,8 @@ class PointConvBidirection(nn.Module):
             c_feat2s_l0.append(c_feat2_l0)
             flows0.append(flow0)
             
-        flows = [flows0, flows1, flows2, flow3]
+        # flows = [flow0, flow1, flow2, flow3]
+        flows = [flows0, flows1, flows2, flow3] # when using on training
         pc1 = [pc1_l0, pc1_l1, pc1_l2, pc1_l3]
         pc2 = [pc2_l0, pc2_l1, pc2_l2, pc2_l3]
         fps_pc1_idxs = [fps_pc1_l1, fps_pc1_l2, fps_pc1_l3]
@@ -372,8 +373,8 @@ from thop import profile, clever_format
 if __name__ == '__main__':
     import os
     import torch
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-    input = torch.randn((1,4096,3)).float().cuda()
+    os.environ["CUDA_VISIBLE_DEVICES"] = '2'
+    input = torch.randn((1,8192,3)).float().cuda()
     model = PointConvBidirection().cuda()
     # print(model)
     output = model(input,input,input,input)

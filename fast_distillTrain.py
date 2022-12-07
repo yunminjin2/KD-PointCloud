@@ -35,7 +35,7 @@ def main():
     '''CREATE DIR'''
     experiment_dir = Path('./experiment/')
     experiment_dir.mkdir(exist_ok=True)
-    file_dir = Path(str(experiment_dir) + '/test_ht' + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')))
+    file_dir = Path(str(experiment_dir) + '/bidht_FG' + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')))
     file_dir.mkdir(exist_ok=True)
     checkpoints_dir = file_dir.joinpath('checkpoints/')
     checkpoints_dir.mkdir(exist_ok=True)
@@ -180,8 +180,8 @@ def main():
             # loss = loss_functions.biDirection_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, gamma, beta,  layer=3)
             # loss = loss_functions.flow_loss_ht(pred_flows, feat1s, feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.3, 0.7,  layer=3)
             # loss = loss_functions.loss_fn_ht(pred_flows, feat1s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_feat1s, t_fps_pc1_idxs, 0.3, layer=3)
-            # loss = loss_functions.att_iter_loss(pred_flows, c_feat1s, c_feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_c_feat1s, t_c_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.7, layers=[1, 2])
-            loss = loss_functions.att_ht_loss(pred_flows, c_feat1s, c_feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_c_feat1s, t_c_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.7, layers=[1, 2])
+            loss = loss_functions.att_iter_loss(pred_flows, c_feat1s, c_feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_c_feat1s, t_c_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.6, layers=[1, 2])
+            # loss = loss_functions.att_ht_loss(pred_flows, c_feat1s, c_feat2s, fps_pc1_idxs, fps_pc2_idxs, flow, t_pred_flows, t_c_feat1s, t_c_feat2s, t_fps_pc1_idxs, t_fps_pc2_idxs, 0.8, layers=[1, 2])
 
             history['loss'].append(loss.cpu().data.numpy())
             loss.backward()

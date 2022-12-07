@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch
 import numpy as np
 import torch.nn.functional as F
-from pointconv_util2 import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLightFG as CrossLayer
-from pointconv_util2 import SceneFlowEstimatorResidual
-from pointconv_util2 import index_points_gather as index_points, index_points_group, Conv1d, square_distance
+from pointconv_util import PointConv, PointConvD, PointWarping, UpsampleFlow, CrossLayerLightFG as CrossLayer
+from pointconv_util import SceneFlowEstimatorResidual
+from pointconv_util import index_points_gather as index_points, index_points_group, Conv1d, square_distance
 import time
 
 scale = 1.0
